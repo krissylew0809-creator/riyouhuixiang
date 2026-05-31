@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>日有回响 - 温柔高效的期末与生活规划</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="sidebar" aria-label="任务控制台">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">日</div>
+          <div>
+            <p class="eyebrow">日有回响</p>
+            <h1>每一天都留下完成的证据</h1>
+          </div>
+        </div>
+        <button class="collapse-tab collapse-left" id="collapse-left" type="button" aria-label="折叠左栏">‹</button>
+
+        <nav class="app-nav" aria-label="主要功能">
+          <button type="button" data-view="calendar" class="active">日历</button>
+          <button type="button" data-view="tasks">清单</button>
+          <button type="button" data-view="study">复习</button>
+          <button type="button" data-view="monthly">总结</button>
+        </nav>
+
+        <section class="composer" aria-labelledby="add-title">
+          <h2 id="add-title">快速收集</h2>
+          <form id="task-form">
+            <label>
+              <span>标题</span>
+              <input id="title-input" name="title" type="text" placeholder="例如 BUSS5220 作业" required>
+            </label>
+            <div class="form-grid">
+              <label>
+                <span>日期</span>
+                <input id="date-input" name="date" type="date" required>
+              </label>
+              <label>
+                <span>类型</span>
+                <select id="type-input" name="type">
+                  <option value="study">学习</option>
+                  <option value="revision">复习周</option>
+                  <option value="exam">考试/硬DDL</option>
+                  <option value="assignment">作业</option>
+                  <option value="matter">事项</option>
+                </select>
+              </label>
+            </div>
+            <label>
+              <span>截止日期</span>
+              <input id="due-input" name="due" type="date">
+            </label>
+            <label>
+              <span>备注</span>
+              <textarea id="note-input" name="note" rows="3" placeholder="给未来的自己留一句话"></textarea>
+            </label>
+            <button class="primary-action" type="submit">
+              <span aria-hidden="true">+</span>
+              加入日历
+            </button>
+          </form>
+        </section>
+
+        <section class="metrics" aria-label="今日概览">
+          <div>
+            <span id="daily-target">6h</span>
+            <p>今日动态安全线</p>
+          </div>
+          <div>
+            <span id="weekly-hours">0h</span>
+            <p>本周学习记录</p>
+          </div>
+        </section>
+
+        <section class="agenda" aria-labelledby="agenda-title">
+          <div class="section-head">
+            <h2 id="agenda-title">今天</h2>
+            <button id="today-button" type="button">回到今天</button>
+          </div>
+          <div id="today-list" class="agenda-list"></div>
+        </section>
+
+        <section class="study-rings" aria-labelledby="rings-title">
+          <div class="section-head">
+            <h2 id="rings-title">期末大屏</h2>
+            <button id="print-plan" type="button">生成PDF版</button>
+          </div>
+          <div id="course-rings" class="course-rings"></div>
+        </section>
+      </aside>
+
+      <section class="calendar-panel" aria-label="日历">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">日有回响</p>
+            <h2 id="month-label">Month</h2>
+          </div>
+          <div class="toolbar" aria-label="日历工具">
+            <button id="app-menu-button" type="button" aria-label="打开功能列表">☰</button>
+            <button id="expand-left" type="button" aria-label="展开左栏">☰</button>
+            <button id="prev-month" type="button" aria-label="上个月">‹</button>
+            <button id="next-month" type="button" aria-label="下个月">›</button>
+            <button id="expand-right" type="button" aria-label="展开右栏">☷</button>
+          </div>
+        </header>
+
+        <section class="command-board" aria-label="智能概览">
+          <article class="command-card primary">
+            <p class="eyebrow" id="focus-card-kicker">所选日期</p>
+            <div class="focus-card-layout">
+              <div>
+                <strong id="hero-focus">自由挑</strong>
+                <span id="hero-focus-copy">今天可以从任务池拖入安排。</span>
+              </div>
+              <div class="focus-pie" id="focus-pie" aria-label="今日完成比例">
+                <span id="focus-pie-label">0%</span>
+              </div>
+            </div>
+            <div class="focus-stats">
+              <span>已选 <b id="focus-selected-hours">0h</b></span>
+              <span>完成 <b id="focus-done-hours">0h</b></span>
+            </div>
+          </article>
+        </section>
+
+        <div id="calendar-grid" class="month-stack"></div>
+      </section>
+
+      <aside class="detail-panel" aria-label="详情">
+        <button class="collapse-tab collapse-right" id="collapse-right" type="button" aria-label="折叠右栏">›</button>
+        <section class="selected-day">
+          <p class="eyebrow">Selected day</p>
+          <h2 id="selected-date">今天</h2>
+          <p id="selected-roast" class="roast">生活看起来非常有结构。</p>
+          <div class="daily-note-box">
+            <label for="daily-note-input">今日备注</label>
+            <textarea id="daily-note-input" rows="4" placeholder="例如：这个视频还有 20min 没看完，明天继续。"></textarea>
+            <div class="daily-note-actions">
+              <span id="daily-note-status">自动保存</span>
+              <button id="carry-note" type="button">明天继续</button>
+            </div>
+          </div>
+        </section>
+        <section class="insight-panel" aria-label="复习压力">
+          <div class="section-head">
+            <h2>智能安全线</h2>
+          </div>
+          <div id="pressure-list" class="pressure-list"></div>
+        </section>
+        <section>
+          <div class="section-head">
+            <h2>当日事项</h2>
+            <button id="clear-done" type="button">只看未完成</button>
+          </div>
+          <div id="selected-list" class="task-stack"></div>
+        </section>
+        <section>
+          <div class="section-head">
+            <h2>复习任务池</h2>
+            <div class="button-row">
+              <button id="reset-study" type="button">重置打卡</button>
+            </div>
+          </div>
+          <div id="study-pool" class="study-pool"></div>
+        </section>
+      </aside>
+    </main>
+
+    <section id="print-layout" class="print-layout" aria-label="打印版待办事项"></section>
+
+    <div id="app-menu" class="app-menu" aria-hidden="true">
+      <section class="menu-sheet" role="dialog" aria-modal="true" aria-labelledby="menu-title">
+        <header class="day-sheet-head">
+          <div>
+            <p class="eyebrow">日有回响</p>
+            <h2 id="menu-title">功能列表</h2>
+          </div>
+          <button id="close-app-menu" type="button" aria-label="关闭">×</button>
+        </header>
+        <div class="menu-grid">
+          <button type="button" data-view="calendar">日历</button>
+          <button type="button" data-view="tasks">任务列表</button>
+          <button type="button" data-view="study">复习项目</button>
+          <button type="button" data-view="monthly">月度总结</button>
+          <button type="button" data-view="yearly">年度总结</button>
+          <button type="button" data-view="inbox">邮件导入</button>
+          <button type="button" data-view="data">数据保险箱</button>
+        </div>
+        <div id="menu-output" class="menu-output"></div>
+        <input id="backup-file" type="file" accept="application/json,.json" hidden>
+      </section>
+    </div>
+
+    <div id="course-editor" class="app-menu" aria-hidden="true">
+      <section class="menu-sheet course-editor-sheet" role="dialog" aria-modal="true" aria-labelledby="course-editor-title">
+        <header class="day-sheet-head">
+          <div>
+            <p class="eyebrow">Course editor</p>
+            <h2 id="course-editor-title">编辑课程</h2>
+          </div>
+          <button id="close-course-editor" type="button" aria-label="关闭">×</button>
+        </header>
+        <div id="course-editor-body"></div>
+      </section>
+    </div>
+
+    <div id="day-modal" class="day-modal" aria-hidden="true">
+      <section class="day-sheet" role="dialog" aria-modal="true" aria-labelledby="day-modal-title">
+        <header class="day-sheet-head">
+          <div>
+            <p class="eyebrow">Day studio</p>
+            <h2 id="day-modal-title">今天</h2>
+            <p id="day-safe-line">动态安全线</p>
+          </div>
+          <button id="close-day-modal" type="button" aria-label="关闭">×</button>
+        </header>
+        <div id="day-modal-list" class="day-modal-list"></div>
+        <form id="day-quick-form" class="day-quick-form">
+          <input id="day-quick-title" type="text" placeholder="加一个当天事项，例如 8:00-9:00 coles上门" required>
+          <button type="submit">加入这天</button>
+        </form>
+      </section>
+    </div>
+
+    <div id="celebration" class="celebration" aria-live="polite">完成，划掉一件。</div>
+
+    <template id="task-template">
+      <article class="task-item">
+        <button class="check-button" type="button" aria-label="切换完成状态"></button>
+        <div class="task-copy">
+          <h3></h3>
+          <p></p>
+        </div>
+        <span class="task-type"></span>
+      </article>
+    </template>
+
+    <script src="./app.js?v=data-vault"></script>
+  </body>
+</html>
