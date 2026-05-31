@@ -5,8 +5,14 @@ const CUSTOM_STUDY_KEY = "somewhen-custom-study-v1";
 const STUDY_PROJECTS_KEY = "somewhen-study-projects-v1";
 const CALENDAR_RESET_KEY = "riyouhuixiang-calendar-reset-v1";
 const FOCUS_RESET_KEY = "riyouhuixiang-focus-reset-v1";
+const SYNC_CONFIG_KEY = "riyouhuixiang-cloud-sync-config-v1";
+const SYNC_META_KEY = "riyouhuixiang-cloud-sync-meta-v1";
 const BUSS_REVIEW_SESSION_COUNT = 13;
 const BUSS_REVIEW_TOTAL_HOURS = 20;
+let suppressPersistenceHooks = false;
+let cloudPushTimer = 0;
+let cloudClient = null;
+let syncConfig = loadCloudSyncConfig();
 const today = startOfDay(new Date());
 const nextSunday = getNextSunday(today);
 
@@ -26,6 +32,7 @@ const roasts = [
   "今天已经很努力了，不用把自己逼成倒计时牌。"
 ];
 
+suppressPersistenceHooks = true;
 const seedTasks = buildSeedTasks();
 const studyProjects = loadStudyProjects();
 saveStudyProjects();
@@ -50,6 +57,7 @@ let studyProgress = loadStudyProgress();
 reconcileCalendarBackedProgress();
 saveStudyProgress();
 let dailyNotes = loadDailyNotes();
+suppressPersistenceHooks = false;
 let visibleMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 let selectedDate = toISO(today);
 let filter = "all";
@@ -81,6 +89,7 @@ const celebration = document.querySelector("#celebration");
 const appMenu = document.querySelector("#app-menu");
 const menuOutput = document.querySelector("#menu-output");
 const backupFileInput = document.querySelector("#backup-file");
+const syncFileInput = backupFileInput;
 const courseEditor = document.querySelector("#course-editor");
 const courseEditorBody = document.querySelector("#course-editor-body");
 const focusCardKicker = document.querySelector("#focus-card-kicker");
@@ -236,6 +245,8 @@ document.querySelectorAll(".menu-grid button").forEach((button) => {
 
 backupFileInput.addEventListener("change", importDataBackup);
 
+initCloudSync();
+
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   const data = new FormData(form);
@@ -363,6 +374,7 @@ function syncBussReviewSessions(project) {
 
 function saveStudyProjects() {
   localStorage.setItem(STUDY_PROJECTS_KEY, JSON.stringify(studyProjects));
+  markLocalUpdated();
 }
 
 function applyCustomStudyItems(projects) {
@@ -395,6 +407,7 @@ function saveCustomStudyItem(projectId, moduleName, customItem) {
   }
   customItems.push({ projectId, moduleName, item: customItem });
   localStorage.setItem(CUSTOM_STUDY_KEY, JSON.stringify(customItems));
+  markLocalUpdated();
 }
 
 function saveAllCustomStudy() {
@@ -409,6 +422,7 @@ function saveAllCustomStudy() {
     });
   });
   localStorage.setItem(CUSTOM_STUDY_KEY, JSON.stringify(entries));
+  markLocalUpdated();
 }
 
 function buildSeedTasks() {
@@ -417,14 +431,17 @@ function buildSeedTasks() {
 
 function saveTasks() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+  markLocalUpdated();
 }
 
 function saveStudyProgress() {
   localStorage.setItem(STUDY_KEY, JSON.stringify(studyProgress));
+  markLocalUpdated();
 }
 
 function saveDailyNotes() {
   localStorage.setItem(DAILY_NOTES_KEY, JSON.stringify(dailyNotes));
+  markLocalUpdated();
 }
 
 function ensureFinalTasks(items) {
@@ -1487,21 +1504,68 @@ function renderMenuOutput(view) {
         <button id="export-backup" type="button">导出 ${backupName}</button>
         <button id="import-backup" type="button">导入备份</button>
       </div>
+      <div class="cloud-sync-card">
+        <h3>云同步</h3>
+        <p>配置一次 Supabase 后，数据会用同步口令加密，再同步到云端。换电脑时输入同一套配置和口令即可恢复。</p>
+        <label>Supabase URL<input id="sync-url" type="url" value="${escapeAttribute(syncConfig.url || "")}" placeholder="https://xxxx.supabase.co"></label>
+        <label>Anon key<input id="sync-key" type="password" value="${escapeAttribute(syncConfig.anonKey || "")}" placeholder="eyJ..."></label>
+        <label>同步口令<input id="sync-passphrase" type="password" value="${escapeAttribute(syncConfig.passphrase || "")}" placeholder="自己取一个长一点的口令"></label>
+        <div class="backup-actions">
+          <button id="save-sync-config" type="button">保存云同步</button>
+          <button id="push-cloud" type="button">立即上传</button>
+          <button id="pull-cloud" type="button">从云端恢复</button>
+        </div>
+        <p id="sync-status" class="sync-status">${cloudSyncStatusText()}</p>
+        <details class="sync-help">
+          <summary>Supabase 里要建的表</summary>
+          <pre>create table if not exists riyouhuixiang_sync (
+  id text primary key,
+  encrypted_payload jsonb not null,
+  updated_at timestamptz not null default now()
+);
+
+alter table riyouhuixiang_sync enable row level security;
+
+create policy "read sync snapshots" on riyouhuixiang_sync
+for select using (true);
+
+create policy "insert sync snapshots" on riyouhuixiang_sync
+for insert with check (true);
+
+create policy "update sync snapshots" on riyouhuixiang_sync
+for update using (true) with check (true);</pre>
+        </details>
+      </div>
     `
   };
   menuOutput.innerHTML = summaries[view] || summaries.monthly;
   if (view === "data") {
     document.querySelector("#export-backup").addEventListener("click", exportDataBackup);
     document.querySelector("#import-backup").addEventListener("click", () => backupFileInput.click());
+    document.querySelector("#save-sync-config").addEventListener("click", saveCloudSyncConfigFromMenu);
+    document.querySelector("#push-cloud").addEventListener("click", () => pushCloudSnapshot({ manual: true }));
+    document.querySelector("#pull-cloud").addEventListener("click", () => pullCloudSnapshot({ manual: true }));
   }
 }
 
 function exportDataBackup() {
-  const backup = {
+  const backup = currentDataBackup();
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `日有回响-backup-${toISO(today)}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function currentDataBackup() {
+  return {
     app: "日有回响",
     version: 1,
     exportedAt: new Date().toISOString(),
     origin: location.origin,
+    localUpdatedAt: loadLocalMeta().updatedAt,
     data: {
       [STORAGE_KEY]: tasks,
       [STUDY_KEY]: studyProgress,
@@ -1511,13 +1575,6 @@ function exportDataBackup() {
       "somewhen-collapsed-courses-v1": [...collapsedCourses]
     }
   };
-  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `日有回响-backup-${toISO(today)}.json`;
-  link.click();
-  URL.revokeObjectURL(url);
 }
 
 function importDataBackup(event) {
@@ -1528,12 +1585,7 @@ function importDataBackup(event) {
     try {
       const backup = JSON.parse(reader.result);
       const data = backup.data || backup;
-      const keys = [STORAGE_KEY, STUDY_KEY, DAILY_NOTES_KEY, CUSTOM_STUDY_KEY, STUDY_PROJECTS_KEY, "somewhen-collapsed-courses-v1"];
-      keys.forEach((key) => {
-        if (data[key] !== undefined) localStorage.setItem(key, JSON.stringify(data[key]));
-      });
-      localStorage.setItem(CALENDAR_RESET_KEY, "true");
-      localStorage.setItem(FOCUS_RESET_KEY, "true");
+      applyBackupData(data, backup.localUpdatedAt || new Date().toISOString());
       showCelebration("备份已导入");
       window.setTimeout(() => location.reload(), 500);
     } catch {
@@ -1543,6 +1595,226 @@ function importDataBackup(event) {
     }
   });
   reader.readAsText(file);
+}
+
+function applyBackupData(data, updatedAt = new Date().toISOString()) {
+  suppressPersistenceHooks = true;
+  const keys = [STORAGE_KEY, STUDY_KEY, DAILY_NOTES_KEY, CUSTOM_STUDY_KEY, STUDY_PROJECTS_KEY, "somewhen-collapsed-courses-v1"];
+  keys.forEach((key) => {
+    if (data[key] !== undefined) localStorage.setItem(key, JSON.stringify(data[key]));
+  });
+  localStorage.setItem(CALENDAR_RESET_KEY, "true");
+  localStorage.setItem(FOCUS_RESET_KEY, "true");
+  localStorage.setItem(SYNC_META_KEY, JSON.stringify({ updatedAt }));
+  suppressPersistenceHooks = false;
+}
+
+function markLocalUpdated() {
+  if (suppressPersistenceHooks) return;
+  localStorage.setItem(SYNC_META_KEY, JSON.stringify({ updatedAt: new Date().toISOString() }));
+  scheduleCloudPush();
+}
+
+function loadLocalMeta() {
+  try {
+    return JSON.parse(localStorage.getItem(SYNC_META_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function loadCloudSyncConfig() {
+  try {
+    return JSON.parse(localStorage.getItem(SYNC_CONFIG_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveCloudSyncConfigFromMenu() {
+  syncConfig = {
+    url: document.querySelector("#sync-url").value.trim(),
+    anonKey: document.querySelector("#sync-key").value.trim(),
+    passphrase: document.querySelector("#sync-passphrase").value
+  };
+  localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(syncConfig));
+  cloudClient = null;
+  updateSyncStatus("云同步配置已保存。");
+  initCloudSync();
+}
+
+function cloudSyncStatusText() {
+  if (!isCloudConfigured()) return "未配置。先创建 Supabase 项目，再填入 URL、Anon key 和同步口令。";
+  const localMeta = loadLocalMeta();
+  const last = localMeta.cloudSyncedAt ? `上次云同步：${new Date(localMeta.cloudSyncedAt).toLocaleString("zh-CN")}` : "已配置，等待第一次同步。";
+  return last;
+}
+
+function updateSyncStatus(message) {
+  const status = document.querySelector("#sync-status");
+  if (status) status.textContent = message;
+}
+
+function isCloudConfigured() {
+  return Boolean(syncConfig.url && syncConfig.anonKey && syncConfig.passphrase);
+}
+
+async function initCloudSync() {
+  if (!isCloudConfigured()) return;
+  try {
+    await reconcileCloudOnStart();
+  } catch (error) {
+    updateSyncStatus(`云同步暂时连不上：${error.message}`);
+  }
+}
+
+function scheduleCloudPush() {
+  if (!isCloudConfigured()) return;
+  window.clearTimeout(cloudPushTimer);
+  cloudPushTimer = window.setTimeout(() => {
+    pushCloudSnapshot({ silent: true });
+  }, 1400);
+}
+
+async function getCloudClient() {
+  if (cloudClient) return cloudClient;
+  const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+  cloudClient = createClient(syncConfig.url, syncConfig.anonKey);
+  return cloudClient;
+}
+
+async function cloudDocumentId() {
+  return sha256Hex(`riyouhuixiang:${syncConfig.passphrase}`);
+}
+
+async function pushCloudSnapshot(options = {}) {
+  if (!isCloudConfigured()) {
+    updateSyncStatus("先保存云同步配置。");
+    return;
+  }
+  if (!options.silent) updateSyncStatus("正在上传到云端...");
+  const client = await getCloudClient();
+  const encryptedPayload = await encryptBackup(currentDataBackup(), syncConfig.passphrase);
+  const cloudUpdatedAt = new Date().toISOString();
+  const { error } = await client
+    .from("riyouhuixiang_sync")
+    .upsert({
+      id: await cloudDocumentId(),
+      encrypted_payload: encryptedPayload,
+      updated_at: cloudUpdatedAt
+    });
+  if (error) throw error;
+  const meta = loadLocalMeta();
+  localStorage.setItem(SYNC_META_KEY, JSON.stringify({ ...meta, cloudSyncedAt: cloudUpdatedAt }));
+  updateSyncStatus(options.silent ? `已自动同步：${new Date(cloudUpdatedAt).toLocaleTimeString("zh-CN")}` : "已上传到云端。");
+}
+
+async function pullCloudSnapshot(options = {}) {
+  if (!isCloudConfigured()) {
+    updateSyncStatus("先保存云同步配置。");
+    return null;
+  }
+  updateSyncStatus("正在从云端读取...");
+  const client = await getCloudClient();
+  const { data, error } = await client
+    .from("riyouhuixiang_sync")
+    .select("encrypted_payload, updated_at")
+    .eq("id", await cloudDocumentId())
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) {
+    updateSyncStatus("云端还没有数据，我会先上传当前这份。");
+    await pushCloudSnapshot({ silent: true });
+    return null;
+  }
+  const backup = await decryptBackup(data.encrypted_payload, syncConfig.passphrase);
+  applyBackupData(backup.data || backup, backup.localUpdatedAt || data.updated_at);
+  const meta = loadLocalMeta();
+  localStorage.setItem(SYNC_META_KEY, JSON.stringify({ ...meta, cloudSyncedAt: data.updated_at }));
+  updateSyncStatus("已从云端恢复，页面马上刷新。");
+  if (options.manual !== false) window.setTimeout(() => location.reload(), 500);
+  return data;
+}
+
+async function reconcileCloudOnStart() {
+  const client = await getCloudClient();
+  const { data, error } = await client
+    .from("riyouhuixiang_sync")
+    .select("encrypted_payload, updated_at")
+    .eq("id", await cloudDocumentId())
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) {
+    await pushCloudSnapshot({ silent: true });
+    return;
+  }
+  const localUpdatedAt = loadLocalMeta().updatedAt || "1970-01-01T00:00:00.000Z";
+  if (new Date(data.updated_at) > new Date(localUpdatedAt)) {
+    const backup = await decryptBackup(data.encrypted_payload, syncConfig.passphrase);
+    applyBackupData(backup.data || backup, backup.localUpdatedAt || data.updated_at);
+    window.setTimeout(() => location.reload(), 250);
+  } else if (new Date(localUpdatedAt) > new Date(data.updated_at)) {
+    await pushCloudSnapshot({ silent: true });
+  }
+}
+
+async function encryptBackup(backup, passphrase) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveEncryptionKey(passphrase, salt);
+  const encoded = new TextEncoder().encode(JSON.stringify(backup));
+  const cipherBuffer = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
+  return {
+    version: 1,
+    salt: bytesToBase64(salt),
+    iv: bytesToBase64(iv),
+    ciphertext: bytesToBase64(new Uint8Array(cipherBuffer))
+  };
+}
+
+async function decryptBackup(encryptedPayload, passphrase) {
+  const salt = base64ToBytes(encryptedPayload.salt);
+  const iv = base64ToBytes(encryptedPayload.iv);
+  const ciphertext = base64ToBytes(encryptedPayload.ciphertext);
+  const key = await deriveEncryptionKey(passphrase, salt);
+  const plainBuffer = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
+  return JSON.parse(new TextDecoder().decode(plainBuffer));
+}
+
+async function deriveEncryptionKey(passphrase, salt) {
+  const baseKey = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(passphrase),
+    "PBKDF2",
+    false,
+    ["deriveKey"]
+  );
+  return crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt, iterations: 120000, hash: "SHA-256" },
+    baseKey,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"]
+  );
+}
+
+async function sha256Hex(text) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function base64ToBytes(value) {
+  const binary = atob(value);
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
 }
 
 function renderDayRow(task) {

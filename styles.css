@@ -1188,6 +1188,58 @@ textarea:focus {
   font-weight: 820;
 }
 
+.cloud-sync-card {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  margin-top: 16px;
+  padding-top: 16px;
+}
+
+.cloud-sync-card h3 {
+  margin: 0;
+}
+
+.cloud-sync-card label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 780;
+}
+
+.cloud-sync-card input {
+  min-height: 38px;
+}
+
+.sync-status {
+  border: 1px solid rgba(109, 155, 137, 0.2);
+  border-radius: var(--radius);
+  background: rgba(230, 241, 235, 0.5);
+  padding: 10px;
+}
+
+.sync-help {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.sync-help summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.sync-help pre {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+  padding: 12px;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
 .import-error {
   border: 1px solid rgba(217, 111, 103, 0.28);
   border-radius: var(--radius);

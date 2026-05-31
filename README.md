@@ -19,3 +19,28 @@
 
 - 功能列表 -> 数据保险箱 -> 导出备份
 - 新网址/新浏览器 -> 数据保险箱 -> 导入备份
+
+## 云同步
+
+app 也支持 Supabase 云同步。同步数据会先用用户自己的同步口令在浏览器里加密，再上传到 Supabase。
+
+Supabase 里需要创建表：
+
+```sql
+create table if not exists riyouhuixiang_sync (
+  id text primary key,
+  encrypted_payload jsonb not null,
+  updated_at timestamptz not null default now()
+);
+
+alter table riyouhuixiang_sync enable row level security;
+
+create policy "read sync snapshots" on riyouhuixiang_sync
+for select using (true);
+
+create policy "insert sync snapshots" on riyouhuixiang_sync
+for insert with check (true);
+
+create policy "update sync snapshots" on riyouhuixiang_sync
+for update using (true) with check (true);
+```
