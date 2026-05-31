@@ -404,6 +404,12 @@ textarea:focus {
   background: linear-gradient(135deg, rgba(109, 155, 137, 0.18), rgba(255, 255, 255, 0.72));
 }
 
+.command-card.primary.drag-over {
+  border-color: rgba(109, 155, 137, 0.7);
+  background: linear-gradient(135deg, rgba(230, 241, 235, 0.9), rgba(255, 255, 255, 0.84));
+  box-shadow: 0 16px 42px rgba(109, 155, 137, 0.18);
+}
+
 .command-card.urgent {
   border-color: rgba(194, 75, 64, 0.24);
 }
@@ -421,6 +427,99 @@ textarea:focus {
   color: var(--muted);
   font-size: 0.78rem;
   line-height: 1.35;
+}
+
+.focus-day-items {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  border-top: 1px solid rgba(59, 82, 75, 0.1);
+  padding-top: 10px;
+}
+
+.focus-items-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 820;
+}
+
+.focus-items-head span,
+.focus-items-head b {
+  display: inline;
+  margin: 0;
+  font-size: inherit;
+}
+
+.focus-day-task,
+.focus-more {
+  width: 100%;
+  min-height: 32px;
+  border: 1px solid rgba(59, 82, 75, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--ink);
+  padding: 7px 9px;
+  text-align: left;
+  font-size: 0.78rem;
+  font-weight: 740;
+}
+
+.focus-day-task {
+  display: grid;
+  grid-template-columns: 12px 1fr;
+  gap: 7px;
+  align-items: start;
+}
+
+.focus-day-task span {
+  display: inline;
+  margin: 0;
+  color: inherit;
+  font-size: inherit;
+  line-height: 1.35;
+}
+
+.focus-day-task .dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--study);
+}
+
+.focus-day-task[data-type="revision"] .dot {
+  background: var(--revision);
+}
+
+.focus-day-task[data-type="exam"] .dot {
+  background: var(--exam);
+}
+
+.focus-day-task[data-type="assignment"] .dot {
+  background: var(--assignment);
+}
+
+.focus-day-task[data-type="matter"] .dot {
+  background: var(--matter);
+}
+
+.focus-day-task.done {
+  color: #8a8780;
+  background: rgba(235, 234, 230, 0.66);
+  text-decoration: line-through;
+}
+
+.focus-more {
+  color: var(--muted);
+}
+
+.focus-items-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 
 .metrics p {
@@ -1042,8 +1141,20 @@ textarea:focus {
   text-align: center;
 }
 
+.study-check-row {
+  display: inline-grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  align-items: stretch;
+  max-width: 100%;
+}
+
+.study-check-row.long {
+  width: 100%;
+}
+
 .study-check {
   text-align: left;
+  width: 100%;
   max-width: 100%;
   min-height: 30px;
   border: 1px solid var(--line);
@@ -1055,15 +1166,52 @@ textarea:focus {
   font-weight: 750;
 }
 
+.study-check-row .study-check {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
 .study-check.long {
   width: 100%;
-  border-radius: var(--radius);
+  border-radius: var(--radius) 0 0 var(--radius);
   padding: 8px 10px;
   line-height: 1.35;
 }
 
 .study-check[draggable="true"] {
   cursor: grab;
+}
+
+.study-send {
+  width: 30px;
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-left: 0;
+  border-radius: 0 999px 999px 0;
+  background: rgba(230, 241, 235, 0.86);
+  color: var(--accent);
+  font-weight: 900;
+}
+
+.study-check-row.long .study-send {
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.study-send:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+body.is-dragging-study .command-card.primary::after {
+  content: "也可以松手放到当前选中的日期";
+  display: block;
+  margin-top: 8px;
+  border: 1px dashed rgba(109, 155, 137, 0.42);
+  border-radius: 10px;
+  color: var(--accent);
+  padding: 8px;
+  font-size: 0.76rem;
+  font-weight: 820;
 }
 
 .study-check.done {

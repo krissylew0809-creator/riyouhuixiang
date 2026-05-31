@@ -101,10 +101,12 @@ const focusPie = document.querySelector("#focus-pie");
 const focusPieLabel = document.querySelector("#focus-pie-label");
 const focusSelectedHours = document.querySelector("#focus-selected-hours");
 const focusDoneHours = document.querySelector("#focus-done-hours");
+const focusDayItems = document.querySelector("#focus-day-items");
 const pressureList = document.querySelector("#pressure-list");
 let activeCourseId = "";
 let calendarAutoScrollFrame = 0;
 let calendarAutoScrollSpeed = 0;
+let activeDragPayload = null;
 
 document.querySelector("#date-input").value = selectedDate;
 document.querySelector("#due-input").value = "";
@@ -218,9 +220,29 @@ document.querySelector(".detail-panel").addEventListener("drop", (event) => {
   }
 });
 
+document.querySelector(".command-board").addEventListener("dragover", (event) => {
+  const payload = readDragPayload(event);
+  if (payload?.kind === "study-item" || payload?.kind === "focus-course") {
+    event.preventDefault();
+    document.querySelector(".command-card.primary").classList.add("drag-over");
+  }
+});
+
+document.querySelector(".command-board").addEventListener("dragleave", () => {
+  document.querySelector(".command-card.primary").classList.remove("drag-over");
+});
+
+document.querySelector(".command-board").addEventListener("drop", (event) => {
+  event.preventDefault();
+  document.querySelector(".command-card.primary").classList.remove("drag-over");
+  const payload = readDragPayload(event);
+  if (payload?.kind === "study-item") scheduleStudyItem(payload, selectedDate);
+  if (payload?.kind === "focus-course") createFocusMarker(payload.projectId, selectedDate);
+});
+
 document.addEventListener("dragover", updateCalendarAutoScroll);
-document.addEventListener("drop", stopCalendarAutoScroll);
-document.addEventListener("dragend", stopCalendarAutoScroll);
+document.addEventListener("drop", finishDragging);
+document.addEventListener("dragend", finishDragging);
 
 document.querySelector("#clear-done").addEventListener("click", () => {
   filter = filter === "open" ? "all" : "open";
@@ -731,11 +753,13 @@ function renderMonthSection(monthDate, isFirstMonth) {
       markerEl.textContent = `${marker.project.name}日 ${marker.day.focus}`;
       markerEl.addEventListener("click", (event) => event.stopPropagation());
       markerEl.addEventListener("dragstart", (event) => {
-        event.dataTransfer.setData("application/json", JSON.stringify({
+        const payload = {
           kind: "focus-marker",
           projectId: marker.project.id,
           focus: marker.day.focus
-        }));
+        };
+        startDraggingStudy(event, payload);
+        event.dataTransfer.setData("application/json", JSON.stringify(payload));
       });
       events.append(markerEl);
     });
@@ -748,7 +772,9 @@ function renderMonthSection(monthDate, isFirstMonth) {
       const dueText = task.due === iso && task.due !== task.date ? " 截止" : "";
       event.draggable = Boolean(task.sourceStudyId);
       event.addEventListener("dragstart", (dragEvent) => {
-        dragEvent.dataTransfer.setData("application/json", JSON.stringify({ kind: "calendar-task", taskId: task.id }));
+        const payload = { kind: "calendar-task", taskId: task.id };
+        startDraggingStudy(dragEvent, payload);
+        dragEvent.dataTransfer.setData("application/json", JSON.stringify(payload));
       });
       event.addEventListener("click", (clickEvent) => {
         clickEvent.stopPropagation();
@@ -864,6 +890,50 @@ function renderCommandBoard() {
   focusDoneHours.textContent = formatDuration(progress.done);
   focusPie.style.setProperty("--pie-value", `${progress.percent}%`);
   focusPieLabel.textContent = `${Math.round(progress.percent)}%`;
+  renderFocusDayItems(iso);
+}
+
+function renderFocusDayItems(iso) {
+  const items = tasksForDate(iso);
+  focusDayItems.innerHTML = "";
+  const head = document.createElement("div");
+  head.className = "focus-items-head";
+  head.innerHTML = `<span>当日事项</span><b>${items.length}</b>`;
+  focusDayItems.append(head);
+
+  if (!items.length) {
+    const empty = document.createElement("p");
+    empty.className = "focus-items-empty";
+    empty.textContent = "这天还很清爽。";
+    focusDayItems.append(empty);
+    return;
+  }
+
+  items.slice(0, 5).forEach((task) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "focus-day-task";
+    button.classList.toggle("done", task.done);
+    button.dataset.type = task.type;
+    const timeText = task.startTime ? `${task.startTime}${task.endTime ? `-${task.endTime}` : ""} · ` : "";
+    const hoursText = task.estimatedHours ? ` · ${formatDuration(task.estimatedHours)}` : "";
+    button.innerHTML = `<span class="dot"></span><span>${escapeHTML(timeText)}${escapeHTML(task.title)}${escapeHTML(hoursText)}</span>`;
+    button.addEventListener("click", () => {
+      toggleTaskDone(task);
+      saveTasks();
+      render();
+    });
+    focusDayItems.append(button);
+  });
+
+  if (items.length > 5) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "focus-more";
+    more.textContent = `还有 ${items.length - 5} 件，打开当天看完整`;
+    more.addEventListener("click", () => openDayModal(iso));
+    focusDayItems.append(more);
+  }
 }
 
 function syncSelectedDateViews() {
@@ -960,11 +1030,14 @@ function renderStudy() {
     chip.textContent = `安排 ${project.name} 主攻日`;
     chip.title = `拖到日历，系统自动生成 ${project.name} 的下一个 D`;
     chip.addEventListener("dragstart", (event) => {
-      event.dataTransfer.setData("application/json", JSON.stringify({
+      const payload = {
         kind: "focus-course",
         projectId: project.id
-      }));
+      };
+      startDraggingStudy(event, payload);
+      event.dataTransfer.setData("application/json", JSON.stringify(payload));
     });
+    chip.addEventListener("click", () => createFocusMarker(project.id, selectedDate));
     focusGrid.append(chip);
     projectBlock.append(focusCard);
 
@@ -983,6 +1056,9 @@ function renderStudy() {
       const gridEl = moduleCard.querySelector(".check-grid");
       module.items.forEach((task) => {
         if (isStudyScheduled(project.id, task.id) && !isStudyDone(project.id, task)) return;
+        const row = document.createElement("div");
+        row.className = "study-check-row";
+        row.classList.toggle("long", task.long || task.title.length > 28);
         const button = document.createElement("button");
         button.type = "button";
         button.className = "study-check";
@@ -992,15 +1068,33 @@ function renderStudy() {
         button.classList.toggle("long", task.long || task.title.length > 28);
         button.textContent = `${completed ? "✓ " : ""}${task.title}${task.hours ? ` · ${formatDuration(task.hours)}` : ""}`;
         button.addEventListener("dragstart", (event) => {
-          event.dataTransfer.setData("application/json", JSON.stringify({
+          const payload = {
             kind: "study-item",
             projectId: project.id,
             moduleName: module.name,
             itemId: task.id
-          }));
+          };
+          startDraggingStudy(event, payload);
+          event.dataTransfer.setData("application/json", JSON.stringify(payload));
         });
         button.addEventListener("click", () => toggleStudyItem(project, module, task));
-        gridEl.append(button);
+        const sendButton = document.createElement("button");
+        sendButton.type = "button";
+        sendButton.className = "study-send";
+        sendButton.title = `安排到 ${formatDate(selectedDate)}`;
+        sendButton.setAttribute("aria-label", `安排 ${task.title} 到所选日期`);
+        sendButton.textContent = "→";
+        sendButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          scheduleStudyItem({
+            kind: "study-item",
+            projectId: project.id,
+            moduleName: module.name,
+            itemId: task.id
+          }, selectedDate);
+        });
+        row.append(button, sendButton);
+        gridEl.append(row);
       });
       projectBlock.append(moduleCard);
     });
@@ -1294,10 +1388,24 @@ function parseHours(value) {
 
 function readDragPayload(event) {
   try {
-    return JSON.parse(event.dataTransfer.getData("application/json"));
+    const data = event.dataTransfer.getData("application/json");
+    return data ? JSON.parse(data) : activeDragPayload;
   } catch {
-    return null;
+    return activeDragPayload;
   }
+}
+
+function startDraggingStudy(event, payload = null) {
+  activeDragPayload = payload;
+  event.dataTransfer.effectAllowed = "move";
+  document.body.classList.add("is-dragging-study");
+}
+
+function finishDragging() {
+  activeDragPayload = null;
+  document.body.classList.remove("is-dragging-study");
+  document.querySelectorAll(".drag-over").forEach((item) => item.classList.remove("drag-over"));
+  stopCalendarAutoScroll();
 }
 
 function updateCalendarAutoScroll(event) {
