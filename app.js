@@ -7,6 +7,8 @@ const CALENDAR_RESET_KEY = "riyouhuixiang-calendar-reset-v1";
 const FOCUS_RESET_KEY = "riyouhuixiang-focus-reset-v1";
 const SYNC_CONFIG_KEY = "riyouhuixiang-cloud-sync-config-v1";
 const SYNC_META_KEY = "riyouhuixiang-cloud-sync-meta-v1";
+const DEFAULT_SYNC_URL = "https://vcdlbbauscvnslyxivry.supabase.co";
+const DEFAULT_SYNC_KEY = "sb_publishable_KVwaFH59AEJrhGQulC_bQA_VDJp5xoc";
 const BUSS_REVIEW_SESSION_COUNT = 13;
 const BUSS_REVIEW_TOTAL_HOURS = 20;
 let suppressPersistenceHooks = false;
@@ -1506,9 +1508,9 @@ function renderMenuOutput(view) {
       </div>
       <div class="cloud-sync-card">
         <h3>云同步</h3>
-        <p>配置一次 Supabase 后，数据会用同步口令加密，再同步到云端。换电脑时输入同一套配置和口令即可恢复。</p>
-        <label>Supabase URL<input id="sync-url" type="url" value="${escapeAttribute(syncConfig.url || "")}" placeholder="https://xxxx.supabase.co"></label>
-        <label>Anon key<input id="sync-key" type="password" value="${escapeAttribute(syncConfig.anonKey || "")}" placeholder="eyJ..."></label>
+        <p>云端已经接好。你只需要设置一个自己的同步口令，数据会先加密再上传；换电脑时输入同一个口令即可恢复。</p>
+        <label class="sync-advanced">Supabase URL<input id="sync-url" type="url" value="${escapeAttribute(syncConfig.url || DEFAULT_SYNC_URL)}" placeholder="https://xxxx.supabase.co"></label>
+        <label class="sync-advanced">Publishable key<input id="sync-key" type="password" value="${escapeAttribute(syncConfig.anonKey || DEFAULT_SYNC_KEY)}" placeholder="sb_publishable_..."></label>
         <label>同步口令<input id="sync-passphrase" type="password" value="${escapeAttribute(syncConfig.passphrase || "")}" placeholder="自己取一个长一点的口令"></label>
         <div class="backup-actions">
           <button id="save-sync-config" type="button">保存云同步</button>
@@ -1631,10 +1633,18 @@ function loadCloudSyncConfig() {
   }
 }
 
+function effectiveSyncConfig() {
+  return {
+    url: syncConfig.url || DEFAULT_SYNC_URL,
+    anonKey: syncConfig.anonKey || DEFAULT_SYNC_KEY,
+    passphrase: syncConfig.passphrase || ""
+  };
+}
+
 function saveCloudSyncConfigFromMenu() {
   syncConfig = {
-    url: document.querySelector("#sync-url").value.trim(),
-    anonKey: document.querySelector("#sync-key").value.trim(),
+    url: document.querySelector("#sync-url").value.trim() || DEFAULT_SYNC_URL,
+    anonKey: document.querySelector("#sync-key").value.trim() || DEFAULT_SYNC_KEY,
     passphrase: document.querySelector("#sync-passphrase").value
   };
   localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(syncConfig));
@@ -1644,7 +1654,7 @@ function saveCloudSyncConfigFromMenu() {
 }
 
 function cloudSyncStatusText() {
-  if (!isCloudConfigured()) return "未配置。先创建 Supabase 项目，再填入 URL、Anon key 和同步口令。";
+  if (!isCloudConfigured()) return "云端已接好。先填同步口令，再点保存云同步。";
   const localMeta = loadLocalMeta();
   const last = localMeta.cloudSyncedAt ? `上次云同步：${new Date(localMeta.cloudSyncedAt).toLocaleString("zh-CN")}` : "已配置，等待第一次同步。";
   return last;
@@ -1656,7 +1666,8 @@ function updateSyncStatus(message) {
 }
 
 function isCloudConfigured() {
-  return Boolean(syncConfig.url && syncConfig.anonKey && syncConfig.passphrase);
+  const config = effectiveSyncConfig();
+  return Boolean(config.url && config.anonKey && config.passphrase);
 }
 
 async function initCloudSync() {
@@ -1678,13 +1689,14 @@ function scheduleCloudPush() {
 
 async function getCloudClient() {
   if (cloudClient) return cloudClient;
+  const config = effectiveSyncConfig();
   const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
-  cloudClient = createClient(syncConfig.url, syncConfig.anonKey);
+  cloudClient = createClient(config.url, config.anonKey);
   return cloudClient;
 }
 
 async function cloudDocumentId() {
-  return sha256Hex(`riyouhuixiang:${syncConfig.passphrase}`);
+  return sha256Hex(`riyouhuixiang:${effectiveSyncConfig().passphrase}`);
 }
 
 async function pushCloudSnapshot(options = {}) {
@@ -1694,7 +1706,7 @@ async function pushCloudSnapshot(options = {}) {
   }
   if (!options.silent) updateSyncStatus("正在上传到云端...");
   const client = await getCloudClient();
-  const encryptedPayload = await encryptBackup(currentDataBackup(), syncConfig.passphrase);
+  const encryptedPayload = await encryptBackup(currentDataBackup(), effectiveSyncConfig().passphrase);
   const cloudUpdatedAt = new Date().toISOString();
   const { error } = await client
     .from("riyouhuixiang_sync")
@@ -1727,7 +1739,7 @@ async function pullCloudSnapshot(options = {}) {
     await pushCloudSnapshot({ silent: true });
     return null;
   }
-  const backup = await decryptBackup(data.encrypted_payload, syncConfig.passphrase);
+  const backup = await decryptBackup(data.encrypted_payload, effectiveSyncConfig().passphrase);
   applyBackupData(backup.data || backup, backup.localUpdatedAt || data.updated_at);
   const meta = loadLocalMeta();
   localStorage.setItem(SYNC_META_KEY, JSON.stringify({ ...meta, cloudSyncedAt: data.updated_at }));
@@ -1750,7 +1762,7 @@ async function reconcileCloudOnStart() {
   }
   const localUpdatedAt = loadLocalMeta().updatedAt || "1970-01-01T00:00:00.000Z";
   if (new Date(data.updated_at) > new Date(localUpdatedAt)) {
-    const backup = await decryptBackup(data.encrypted_payload, syncConfig.passphrase);
+    const backup = await decryptBackup(data.encrypted_payload, effectiveSyncConfig().passphrase);
     applyBackupData(backup.data || backup, backup.localUpdatedAt || data.updated_at);
     window.setTimeout(() => location.reload(), 250);
   } else if (new Date(localUpdatedAt) > new Date(data.updated_at)) {

@@ -6,14 +6,13 @@
 
 这是纯静态网页，`index.html`、`styles.css`、`app.js` 可以直接部署到 GitHub Pages、Netlify 或 Vercel。
 
-推荐正式网址：
+正式网址：
 
-- GitHub Pages: `https://<github-username>.github.io/riyouhuixiang/`
-- Netlify: 自定义站点名，例如 `https://riyouhuixiang.netlify.app/`
+- GitHub Pages: `https://krissylew0809-creator.github.io/riyouhuixiang/`
 
 ## 数据说明
 
-当前版本的数据保存在浏览器本地存储里。正式链接固定之后，同一个浏览器访问同一个网址会保留完成记录。
+当前版本的数据会先保存在浏览器本地存储里。正式链接固定之后，同一个浏览器访问同一个网址会保留完成记录。
 
 为了防止换浏览器或换网址丢数据，app 内置了「数据保险箱」：
 
@@ -22,9 +21,9 @@
 
 ## 云同步
 
-app 也支持 Supabase 云同步。同步数据会先用用户自己的同步口令在浏览器里加密，再上传到 Supabase。
+app 已接入 Supabase 云同步。同步数据会先用用户自己的同步口令在浏览器里加密，再上传到 Supabase。
 
-Supabase 里需要创建表：
+Supabase 表结构：
 
 ```sql
 create table if not exists riyouhuixiang_sync (

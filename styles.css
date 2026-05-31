@@ -1212,6 +1212,10 @@ textarea:focus {
   min-height: 38px;
 }
 
+.sync-advanced {
+  opacity: 0.72;
+}
+
 .sync-status {
   border: 1px solid rgba(109, 155, 137, 0.2);
   border-radius: var(--radius);
