@@ -350,7 +350,10 @@ function normalizeStudyProjects(projects) {
     if (!Array.isArray(project.planDays)) project.planDays = [];
   });
   const qbus = projects.find((project) => project.id === "qbus5001");
-  if (qbus) syncQbusReviewSlides(qbus);
+  if (qbus) {
+    syncQbusPlan(qbus);
+    syncQbusReviewSlides(qbus);
+  }
   const buss = projects.find((project) => project.id === "buss6002");
   if (buss) {
     syncBussReviewSessions(buss);
@@ -360,6 +363,16 @@ function normalizeStudyProjects(projects) {
     }
   }
   return projects;
+}
+
+function syncQbusPlan(project) {
+  project.planCount = Math.max(Number(project.planCount || 0), 8);
+  const paperModule = project.modules.find((module) => module.name === "Sample exam 两天");
+  const paperDay1 = paperModule?.items.find((studyItem) => studyItem.id === "q5-paper-day-1");
+  const paperDay2 = paperModule?.items.find((studyItem) => studyItem.id === "q5-paper-day-2");
+  if (paperDay1) paperDay1.title = "D7 - sample exam day 1：写试卷 + 改试卷";
+  if (paperDay2) paperDay2.title = "D8 - sample exam day 2：写试卷 + 改试卷";
+  normalizePlanDayNumbers(project);
 }
 
 function syncQbusReviewSlides(project) {
@@ -505,7 +518,7 @@ function buildStudyProjects() {
       color: "#d96f67",
       examDate: "2026-06-12",
       dailyGoal: 5.5,
-      planCount: 7,
+      planCount: 8,
       planDays: [],
       modules: [
         {
@@ -536,8 +549,8 @@ function buildStudyProjects() {
         {
           name: "Sample exam 两天",
           items: [
-            item("q5-paper-day-1", "D6 - sample exam day 1：写试卷 + 改试卷", 5.5, { long: true }),
-            item("q5-paper-day-2", "D7 - sample exam day 2：写试卷 + 改试卷", 5.5, { long: true })
+            item("q5-paper-day-1", "D7 - sample exam day 1：写试卷 + 改试卷", 5.5, { long: true }),
+            item("q5-paper-day-2", "D8 - sample exam day 2：写试卷 + 改试卷", 5.5, { long: true })
           ]
         }
       ]
@@ -2011,8 +2024,10 @@ function moveFocusMarker(projectId, focus, iso) {
   const project = studyProjects.find((item) => item.id === projectId);
   const marker = project?.planDays.find((day) => day.focus === focus);
   if (!marker) return;
+  clearFocusMarkersOnDate(iso, marker);
   marker.date = iso;
   selectedDate = iso;
+  studyProjects.forEach(normalizePlanDayNumbers);
   saveStudyProjects();
   render();
 }
@@ -2020,6 +2035,15 @@ function moveFocusMarker(projectId, focus, iso) {
 function createFocusMarker(projectId, iso) {
   const project = studyProjects.find((item) => item.id === projectId);
   if (!project) return;
+  const existingSameDay = project.planDays.find((day) => day.date === iso);
+  clearFocusMarkersOnDate(iso, existingSameDay);
+  if (existingSameDay) {
+    selectedDate = iso;
+    studyProjects.forEach(normalizePlanDayNumbers);
+    saveStudyProjects();
+    render();
+    return;
+  }
   const maxDays = maxPlanDays(project);
   const nextNumber = project.planDays.length + 1;
   if (nextNumber > maxDays) {
@@ -2028,12 +2052,28 @@ function createFocusMarker(projectId, iso) {
   }
   project.planDays.push(plan(iso, `${project.name} Day`, `D${nextNumber}`));
   selectedDate = iso;
+  studyProjects.forEach(normalizePlanDayNumbers);
   saveStudyProjects();
   render();
 }
 
+function clearFocusMarkersOnDate(iso, exceptDay = null) {
+  studyProjects.forEach((project) => {
+    project.planDays = project.planDays.filter((day) => day === exceptDay || day.date !== iso);
+  });
+}
+
+function normalizePlanDayNumbers(project) {
+  project.planDays
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .forEach((day, index) => {
+      day.label = `${project.name} Day`;
+      day.focus = `D${index + 1}`;
+    });
+}
+
 function maxPlanDays(project) {
-  return Number(project.planCount || (project.id === "buss6002" ? 12 : 7));
+  return Number(project.planCount || (project.id === "buss6002" ? 12 : 8));
 }
 
 function setTaskTime(task) {
