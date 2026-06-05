@@ -195,19 +195,45 @@ dayQuickForm.addEventListener("submit", (event) => {
   openDayModal(selectedDate);
 });
 
-document.querySelector(".detail-panel").addEventListener("dragover", (event) => {
-  event.preventDefault();
-});
+function canReturnToPool(payload) {
+  return payload?.kind === "calendar-task" || payload?.kind === "focus-marker";
+}
 
-document.querySelector(".detail-panel").addEventListener("drop", (event) => {
-  event.preventDefault();
-  const payload = readDragPayload(event);
+function returnDragPayloadToPool(payload) {
   if (payload?.kind === "calendar-task") {
     removeCalendarTask(payload.taskId);
     saveTasks();
-    render();
+    showCelebration("已收回复习池");
   }
-});
+  if (payload?.kind === "focus-marker") {
+    removeFocusMarker(payload.projectId, payload.focus);
+    showCelebration("已取消主攻日");
+  }
+  render();
+}
+
+function setupReturnDropZone(element) {
+  element.addEventListener("dragover", (event) => {
+    const payload = readDragPayload(event);
+    if (!canReturnToPool(payload)) return;
+    event.preventDefault();
+    setDropTarget(element);
+  });
+  element.addEventListener("dragleave", (event) => {
+    if (!element.contains(event.relatedTarget)) clearDropTarget(element);
+  });
+  element.addEventListener("drop", (event) => {
+    const payload = readDragPayload(event);
+    if (!canReturnToPool(payload)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    clearDropTarget();
+    returnDragPayloadToPool(payload);
+  });
+}
+
+setupReturnDropZone(document.querySelector(".detail-panel"));
+setupReturnDropZone(studyPool);
 
 document.querySelector(".command-board").addEventListener("dragover", (event) => {
   const payload = readDragPayload(event);
@@ -977,6 +1003,15 @@ function renderTask(task) {
   const node = template.content.firstElementChild.cloneNode(true);
   node.dataset.type = task.type;
   node.classList.toggle("done", task.done);
+  if (task.sourceStudyId) {
+    node.draggable = true;
+    node.title = "拖回右侧复习任务池可以收回";
+    node.addEventListener("dragstart", (event) => {
+      const payload = { kind: "calendar-task", taskId: task.id };
+      startDraggingStudy(event, payload);
+      event.dataTransfer.setData("application/json", JSON.stringify(payload));
+    });
+  }
   node.querySelector("h3").textContent = task.title;
   node.querySelector("p").textContent = taskMeta(task);
   node.querySelector(".task-type").textContent = labels[task.type];
@@ -2056,6 +2091,14 @@ function moveFocusMarker(projectId, focus, iso) {
   studyProjects.forEach(normalizePlanDayNumbers);
   saveStudyProjects();
   render();
+}
+
+function removeFocusMarker(projectId, focus) {
+  const project = studyProjects.find((item) => item.id === projectId);
+  if (!project) return;
+  project.planDays = project.planDays.filter((day) => day.focus !== focus);
+  studyProjects.forEach(normalizePlanDayNumbers);
+  saveStudyProjects();
 }
 
 function createFocusMarker(projectId, iso) {

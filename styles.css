@@ -631,6 +631,13 @@ textarea:focus {
   background: rgba(230, 241, 235, 0.85);
 }
 
+.detail-panel.drag-over,
+.study-pool.drag-over {
+  outline: 2px dashed rgba(109, 155, 137, 0.64);
+  outline-offset: -5px;
+  background: rgba(230, 241, 235, 0.48);
+}
+
 body.is-dragging-study .day-cell,
 body.is-dragging-study .day-cell:hover,
 body.is-dragging-study .command-card {
