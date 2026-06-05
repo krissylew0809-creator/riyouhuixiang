@@ -528,6 +528,15 @@ textarea:focus {
   line-height: 1.35;
 }
 
+.metrics small {
+  display: block;
+  margin-top: 6px;
+  color: var(--accent);
+  font-size: 0.68rem;
+  font-weight: 760;
+  line-height: 1.25;
+}
+
 .section-head {
   display: flex;
   align-items: center;

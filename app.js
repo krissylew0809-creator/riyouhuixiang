@@ -1609,7 +1609,7 @@ function openDayModal(iso) {
   dayModalTitle.textContent = formatDate(iso, { weekday: true });
   const budget = dayStudyHours(iso);
   const safety = daySafetyRequirement(iso);
-  daySafeLine.textContent = `学习时长 ${formatDuration(budget.total)} / 动态安全线 ${formatDuration(safety)}`;
+  daySafeLine.textContent = `学习时长 ${formatDuration(budget.total)} / 合并安全线 ${formatDuration(safety)}（5001+6002 到 6/16）`;
   daySafeLine.className = budget.total >= safety ? "safe" : "under";
   dayModalList.innerHTML = "";
   const items = tasksForDate(iso);
