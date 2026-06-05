@@ -40,21 +40,9 @@ const seedTasks = buildSeedTasks();
 const studyProjects = loadStudyProjects();
 saveStudyProjects();
 
-if (!localStorage.getItem(FOCUS_RESET_KEY)) {
-  studyProjects.forEach((project) => {
-    project.planDays = [];
-  });
-  saveStudyProjects();
-  localStorage.setItem(FOCUS_RESET_KEY, "true");
-}
-
-if (!localStorage.getItem(CALENDAR_RESET_KEY)) {
-  localStorage.setItem(STORAGE_KEY, "[]");
-  localStorage.setItem(CALENDAR_RESET_KEY, "true");
-}
-
 let tasks = loadTasks();
 tasks = ensureFinalTasks(tasks);
+tasks = recoverCalendarIfEmpty(tasks);
 saveTasks();
 let studyProgress = loadStudyProgress();
 reconcileCalendarBackedProgress();
@@ -509,6 +497,40 @@ function ensureFinalTasks(items) {
     if (existing) Object.assign(existing, exam);
     else items.push({ id: crypto.randomUUID(), ...exam });
   });
+  return items;
+}
+
+function recoverCalendarIfEmpty(items) {
+  const hasPersonalItems = items.some((task) => task.type !== "exam");
+  if (hasPersonalItems) return items;
+
+  const recoveredTasks = [
+    {
+      title: "QBUS5001: 期中06 - One population estimation (Week 6)",
+      date: "2026-05-29",
+      due: "",
+      type: "revision",
+      note: "从 Chrome 残留记录补回：领航课 · 预计 1h。",
+      done: false,
+      sourceStudyId: "q5-nav-06",
+      sourceProjectId: "qbus5001",
+      sourceModule: "领航课",
+      estimatedHours: 1
+    }
+  ];
+
+  recoveredTasks.forEach((task) => {
+    if (!items.some((item) => item.title === task.title && item.date === task.date)) {
+      items.push({ id: crypto.randomUUID(), ...task });
+    }
+  });
+
+  const qbus = studyProjects.find((project) => project.id === "qbus5001");
+  const buss = studyProjects.find((project) => project.id === "buss6002");
+  if (qbus && !qbus.planDays.length) qbus.planDays.push(plan("2026-05-29", "QBUS5001 Day", "D1"));
+  if (buss && !buss.planDays.length) buss.planDays.push(plan("2026-05-30", "BUSS6002 Day", "D1"));
+  studyProjects.forEach(normalizePlanDayNumbers);
+  saveStudyProjects();
   return items;
 }
 
