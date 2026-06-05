@@ -407,7 +407,6 @@ textarea:focus {
 .command-card.primary.drag-over {
   border-color: rgba(109, 155, 137, 0.7);
   background: linear-gradient(135deg, rgba(230, 241, 235, 0.9), rgba(255, 255, 255, 0.84));
-  box-shadow: 0 16px 42px rgba(109, 155, 137, 0.18);
 }
 
 .command-card.urgent {
@@ -621,7 +620,14 @@ textarea:focus {
 .day-cell.drag-over {
   border-color: rgba(109, 155, 137, 0.72);
   background: rgba(230, 241, 235, 0.85);
-  transform: translateY(-1px);
+}
+
+body.is-dragging-study .day-cell,
+body.is-dragging-study .day-cell:hover,
+body.is-dragging-study .command-card {
+  box-shadow: none;
+  transform: none;
+  transition: border-color 80ms ease, background 80ms ease;
 }
 
 .day-cell.is-muted {

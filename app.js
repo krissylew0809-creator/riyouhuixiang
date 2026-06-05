@@ -11,6 +11,7 @@ const DEFAULT_SYNC_URL = "https://vcdlbbauscvnslyxivry.supabase.co";
 const DEFAULT_SYNC_KEY = "sb_publishable_KVwaFH59AEJrhGQulC_bQA_VDJp5xoc";
 const BUSS_REVIEW_SESSION_COUNT = 13;
 const BUSS_REVIEW_TOTAL_HOURS = 20;
+const FINAL_STUDY_END_ISO = "2026-06-16";
 let suppressPersistenceHooks = false;
 let cloudPushTimer = 0;
 let cloudClient = null;
@@ -107,6 +108,7 @@ let activeCourseId = "";
 let calendarAutoScrollFrame = 0;
 let calendarAutoScrollSpeed = 0;
 let activeDragPayload = null;
+let activeDropTarget = null;
 
 document.querySelector("#date-input").value = selectedDate;
 document.querySelector("#due-input").value = "";
@@ -224,17 +226,17 @@ document.querySelector(".command-board").addEventListener("dragover", (event) =>
   const payload = readDragPayload(event);
   if (payload?.kind === "study-item" || payload?.kind === "focus-course") {
     event.preventDefault();
-    document.querySelector(".command-card.primary").classList.add("drag-over");
+    setDropTarget(document.querySelector(".command-card.primary"));
   }
 });
 
-document.querySelector(".command-board").addEventListener("dragleave", () => {
-  document.querySelector(".command-card.primary").classList.remove("drag-over");
+document.querySelector(".command-board").addEventListener("dragleave", (event) => {
+  if (!event.currentTarget.contains(event.relatedTarget)) clearDropTarget();
 });
 
 document.querySelector(".command-board").addEventListener("drop", (event) => {
   event.preventDefault();
-  document.querySelector(".command-card.primary").classList.remove("drag-over");
+  clearDropTarget();
   const payload = readDragPayload(event);
   if (payload?.kind === "study-item") scheduleStudyItem(payload, selectedDate);
   if (payload?.kind === "focus-course") createFocusMarker(payload.projectId, selectedDate);
@@ -738,12 +740,14 @@ function renderMonthSection(monthDate, isFirstMonth) {
     });
     cell.addEventListener("dragover", (event) => {
       event.preventDefault();
-      cell.classList.add("drag-over");
+      setDropTarget(cell);
     });
-    cell.addEventListener("dragleave", () => cell.classList.remove("drag-over"));
+    cell.addEventListener("dragleave", (event) => {
+      if (!cell.contains(event.relatedTarget)) clearDropTarget(cell);
+    });
     cell.addEventListener("drop", (event) => {
       event.preventDefault();
-      cell.classList.remove("drag-over");
+      clearDropTarget();
       const payload = readDragPayload(event);
       if (!payload) return;
       if (payload.kind === "study-item") scheduleStudyItem(payload, iso);
@@ -1362,7 +1366,16 @@ function daySafetyRequirement(iso) {
 }
 
 function overallDailySafety(fromIso) {
-  return studyProjects.reduce((sum, project) => sum + courseDailyNeed(project, fromIso), 0);
+  const remaining = studyProjects.reduce((sum, project) => sum + projectSummaryForDate(project, fromIso).remaining, 0);
+  const days = combinedStudyDaysLeft(fromIso);
+  return days ? remaining / days : remaining;
+}
+
+function combinedStudyDaysLeft(fromIso) {
+  const from = startOfDay(new Date(`${fromIso}T00:00:00`));
+  const finalStudyDay = startOfDay(new Date(`${FINAL_STUDY_END_ISO}T00:00:00`));
+  if (from > finalStudyDay) return 0;
+  return Math.max(1, Math.floor((finalStudyDay - from) / 86400000) + 1);
 }
 
 function weeklyStudyHours() {
@@ -1414,8 +1427,22 @@ function startDraggingStudy(event, payload = null) {
   document.body.classList.add("is-dragging-study");
 }
 
+function setDropTarget(target) {
+  if (!target || activeDropTarget === target) return;
+  clearDropTarget();
+  activeDropTarget = target;
+  activeDropTarget.classList.add("drag-over");
+}
+
+function clearDropTarget(target = activeDropTarget) {
+  if (!target) return;
+  target.classList.remove("drag-over");
+  if (activeDropTarget === target) activeDropTarget = null;
+}
+
 function finishDragging() {
   activeDragPayload = null;
+  activeDropTarget = null;
   document.body.classList.remove("is-dragging-study");
   document.querySelectorAll(".drag-over").forEach((item) => item.classList.remove("drag-over"));
   stopCalendarAutoScroll();
@@ -1425,6 +1452,10 @@ function updateCalendarAutoScroll(event) {
   if (!calendarPanel) return;
   const rect = calendarPanel.getBoundingClientRect();
   const edgeSize = Math.min(120, rect.height * 0.22);
+  if (event.clientX < rect.left || event.clientX > rect.right) {
+    calendarAutoScrollSpeed = 0;
+    return;
+  }
   let speed = 0;
 
   if (event.clientY < rect.top + edgeSize) {
