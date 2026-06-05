@@ -503,7 +503,10 @@ function ensureFinalTasks(items) {
 function recoverCalendarIfEmpty(items) {
   const hasPersonalItems = items.some((task) => task.type !== "exam");
   if (hasPersonalItems) return items;
+  return applyRecoveredMemory(items, { setSelectedDate: false });
+}
 
+function applyRecoveredMemory(items = tasks, options = {}) {
   const recoveredTasks = [
     {
       title: "QBUS5001: 期中06 - One population estimation (Week 6)",
@@ -516,6 +519,30 @@ function recoverCalendarIfEmpty(items) {
       sourceProjectId: "qbus5001",
       sourceModule: "领航课",
       estimatedHours: 1
+    },
+    {
+      title: "和朋友吃饭",
+      date: "2026-06-01",
+      due: "",
+      type: "matter",
+      note: "从之前日历记录补回。",
+      done: false
+    },
+    {
+      title: "继续：这个视频还有一部分没有看完，明天继续完成",
+      date: "2026-06-01",
+      due: "",
+      type: "revision",
+      note: "从今日备注带过来的提醒补回。",
+      done: false
+    },
+    {
+      title: "给下周做一个过度精致的计划",
+      date: "2026-06-02",
+      due: "",
+      type: "matter",
+      note: "从之前日历记录补回。",
+      done: false
     }
   ];
 
@@ -527,11 +554,26 @@ function recoverCalendarIfEmpty(items) {
 
   const qbus = studyProjects.find((project) => project.id === "qbus5001");
   const buss = studyProjects.find((project) => project.id === "buss6002");
-  if (qbus && !qbus.planDays.length) qbus.planDays.push(plan("2026-05-29", "QBUS5001 Day", "D1"));
-  if (buss && !buss.planDays.length) buss.planDays.push(plan("2026-05-30", "BUSS6002 Day", "D1"));
+  addRecoveredPlanDay(qbus, "2026-05-29");
+  addRecoveredPlanDay(buss, "2026-05-30");
   studyProjects.forEach(normalizePlanDayNumbers);
   saveStudyProjects();
+  if (options.setSelectedDate !== false) selectedDate = "2026-06-01";
   return items;
+}
+
+function addRecoveredPlanDay(project, iso) {
+  if (!project) return;
+  if (!project.planDays.some((day) => day.date === iso)) {
+    project.planDays.push(plan(iso, `${project.name} Day`, "D1"));
+  }
+}
+
+function restoreRecoveredMemory() {
+  tasks = applyRecoveredMemory(tasks);
+  saveTasks();
+  render();
+  showCelebration("已补回一批记忆");
 }
 
 function buildStudyProjects() {
@@ -862,7 +904,8 @@ function renderDetail() {
   selectedList.innerHTML = "";
 
   if (!items.length) {
-    selectedList.innerHTML = `<p class="empty-state">这天很清爽。你可以选择休息，也可以安排一点看起来很有前途的事情。</p>`;
+    selectedList.innerHTML = recoveryEmptyState("这天很清爽。你可以选择休息，也可以安排一点看起来很有前途的事情。");
+    attachRecoveryButtons(selectedList);
     return;
   }
 
@@ -909,11 +952,27 @@ function renderToday() {
   const items = tasksForDate(toISO(today));
   todayList.innerHTML = "";
   if (!items.length) {
-    todayList.innerHTML = `<p class="empty-state">今天没有事项，日历正在假装冷静。</p>`;
+    todayList.innerHTML = recoveryEmptyState("今天没有事项，日历正在假装冷静。");
+    attachRecoveryButtons(todayList);
   } else {
     items.forEach((task) => todayList.append(renderTask(task)));
   }
 
+}
+
+function recoveryEmptyState(text) {
+  return `
+    <div class="empty-state recovery-state">
+      <p>${escapeHTML(text)}</p>
+      <button class="restore-memory-button" type="button">恢复之前的期末记忆</button>
+    </div>
+  `;
+}
+
+function attachRecoveryButtons(root = document) {
+  root.querySelectorAll(".restore-memory-button").forEach((button) => {
+    button.addEventListener("click", restoreRecoveredMemory);
+  });
 }
 
 function renderCommandBoard() {
@@ -1679,6 +1738,7 @@ function renderMenuOutput(view) {
       <div class="backup-actions">
         <button id="export-backup" type="button">导出 ${backupName}</button>
         <button id="import-backup" type="button">导入备份</button>
+        <button id="restore-memory" type="button">恢复已知记忆</button>
       </div>
       <div class="cloud-sync-card">
         <h3>云同步</h3>
@@ -1718,6 +1778,7 @@ for update using (true) with check (true);</pre>
   if (view === "data") {
     document.querySelector("#export-backup").addEventListener("click", exportDataBackup);
     document.querySelector("#import-backup").addEventListener("click", () => backupFileInput.click());
+    document.querySelector("#restore-memory").addEventListener("click", restoreRecoveredMemory);
     document.querySelector("#save-sync-config").addEventListener("click", saveCloudSyncConfigFromMenu);
     document.querySelector("#push-cloud").addEventListener("click", () => pushCloudSnapshot({ manual: true }));
     document.querySelector("#pull-cloud").addEventListener("click", () => pullCloudSnapshot({ manual: true }));

@@ -939,6 +939,26 @@ body.is-dragging-study .command-card {
   line-height: 1.45;
 }
 
+.recovery-state {
+  display: grid;
+  gap: 10px;
+}
+
+.recovery-state p {
+  margin: 0;
+}
+
+.restore-memory-button {
+  min-height: 36px;
+  border: 1px solid rgba(109, 155, 137, 0.32);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 0 12px;
+  font-size: 0.8rem;
+  font-weight: 820;
+}
+
 .timeline-item {
   display: grid;
   gap: 4px;
