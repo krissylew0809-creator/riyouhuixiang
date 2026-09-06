@@ -7,6 +7,8 @@ const CALENDAR_RESET_KEY = "riyouhuixiang-calendar-reset-v1";
 const FOCUS_RESET_KEY = "riyouhuixiang-focus-reset-v1";
 const SYNC_CONFIG_KEY = "riyouhuixiang-cloud-sync-config-v1";
 const SYNC_META_KEY = "riyouhuixiang-cloud-sync-meta-v1";
+const PERSONAL_SETTINGS_KEY = "riyouhuixiang-personal-settings-v1";
+const TUTORIAL_KEY = "riyouhuixiang-onboarding-done-v1";
 const DEFAULT_SYNC_URL = "https://vcdlbbauscvnslyxivry.supabase.co";
 const DEFAULT_SYNC_KEY = "sb_publishable_KVwaFH59AEJrhGQulC_bQA_VDJp5xoc";
 const BUSS_REVIEW_SESSION_COUNT = 13;
@@ -21,11 +23,17 @@ const nextSunday = getNextSunday(today);
 
 const labels = {
   study: "学习",
-  revision: "复习周",
+  revision: "计划",
   exam: "考试",
   assignment: "作业",
   matter: "事项"
 };
+
+const defaultProjectColors = ["#8f79d6", "#6d9b89", "#d96f67", "#dd914a", "#7c9dc9", "#c67aa0", "#8aa65f"];
+
+let calendarMode = "month";
+let printMode = "month";
+let personalSettings = loadPersonalSettings();
 
 const roasts = [
   "今天不用被安排，只要把要紧事放到看得见的地方。",
@@ -35,13 +43,35 @@ const roasts = [
   "今天已经很努力了，不用把自己逼成倒计时牌。"
 ];
 
+const onboardingSteps = [
+  {
+    title: "把 deadline 拆成时间",
+    copy: "创建一个计划项目，填 deadline 和预计小时数，日有回响会算出每天最低要推进多少。"
+  },
+  {
+    title: "颜色就是你的分类语言",
+    copy: "SQL 可以是紫色，考公可以是绿色。项目里的小任务会继承颜色，日历一眼就能认出来。"
+  },
+  {
+    title: "右键日期，马上添加",
+    copy: "在月历或周历里右键某一天，可以新建日程、任务、计划日或当天备注。"
+  },
+  {
+    title: "拖进去，也能拖回来",
+    copy: "任务池里的小项拖到日期就是安排；拖回右侧就是收回，完成后会划掉但不会消失。"
+  },
+  {
+    title: "月计划和周计划都能打印",
+    copy: "需要纸质成就感时，在“我”里打印月计划或周计划，拿笔涂掉也算正式胜利。"
+  }
+];
+
 suppressPersistenceHooks = true;
 const seedTasks = buildSeedTasks();
 const studyProjects = loadStudyProjects();
 saveStudyProjects();
 
 let tasks = loadTasks();
-tasks = ensureFinalTasks(tasks);
 saveTasks();
 let studyProgress = loadStudyProgress();
 reconcileCalendarBackedProgress();
@@ -64,6 +94,7 @@ const carryNoteButton = document.querySelector("#carry-note");
 const selectedList = document.querySelector("#selected-list");
 const todayList = document.querySelector("#today-list");
 const dailyTarget = document.querySelector("#daily-target");
+const dailyTargetNote = document.querySelector("#daily-target-note");
 const weeklyHours = document.querySelector("#weekly-hours");
 const template = document.querySelector("#task-template");
 const form = document.querySelector("#task-form");
@@ -91,7 +122,15 @@ const focusSelectedHours = document.querySelector("#focus-selected-hours");
 const focusDoneHours = document.querySelector("#focus-done-hours");
 const focusDayItems = document.querySelector("#focus-day-items");
 const pressureList = document.querySelector("#pressure-list");
+const contextMenu = document.querySelector("#context-menu");
+const onboarding = document.querySelector("#onboarding");
+const onboardingStep = document.querySelector("#onboarding-step");
+const onboardingProgress = document.querySelector("#onboarding-progress");
+const onboardingTitle = document.querySelector("#onboarding-title");
+const onboardingNext = document.querySelector("#next-onboarding");
+const onboardingSkip = document.querySelector("#skip-onboarding");
 let activeCourseId = "";
+let onboardingIndex = 0;
 let calendarAutoScrollFrame = 0;
 let calendarAutoScrollSpeed = 0;
 let activeDragPayload = null;
@@ -105,10 +144,28 @@ document.querySelector("#app-menu-button").addEventListener("click", () => {
   openAppMenu("monthly");
 });
 
+document.querySelector("#week-mode").addEventListener("click", () => {
+  calendarMode = "week";
+  printMode = "week";
+  render();
+});
+
+document.querySelector("#month-mode").addEventListener("click", () => {
+  calendarMode = "month";
+  printMode = "month";
+  render();
+});
+
 document.querySelectorAll(".app-nav button").forEach((button) => {
   button.addEventListener("click", () => {
     document.querySelectorAll(".app-nav button").forEach((item) => item.classList.remove("active"));
     button.classList.add("active");
+    if (button.dataset.view === "calendar" || button.dataset.view === "week") {
+      calendarMode = button.dataset.view === "week" ? "week" : "month";
+      printMode = calendarMode;
+      render();
+      return;
+    }
     openAppMenu(button.dataset.view);
   });
 });
@@ -158,8 +215,7 @@ document.querySelector("#today-button").addEventListener("click", () => {
 });
 
 document.querySelector("#print-plan").addEventListener("click", () => {
-  renderPrintLayout();
-  window.print();
+  printCalendar(calendarMode);
 });
 
 document.querySelector("#reset-study").addEventListener("click", () => {
@@ -285,6 +341,15 @@ document.querySelectorAll(".menu-grid button").forEach((button) => {
 backupFileInput.addEventListener("change", importDataBackup);
 
 initCloudSync();
+initOnboarding();
+
+onboardingNext.addEventListener("click", () => {
+  onboardingIndex += 1;
+  if (onboardingIndex >= onboardingSteps.length) closeOnboarding();
+  else renderOnboardingStep();
+});
+
+onboardingSkip.addEventListener("click", closeOnboarding);
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -296,8 +361,13 @@ form.addEventListener("submit", (event) => {
     due: data.get("due"),
     type: data.get("type"),
     note: data.get("note").trim(),
-    done: false
+    done: false,
+    sourceProjectId: data.get("projectId") || ""
   };
+  if (task.sourceProjectId) {
+    const project = studyProjects.find((item) => item.id === task.sourceProjectId);
+    task.color = project?.color || "";
+  }
   tasks.push(task);
   selectedDate = task.date;
   visibleMonth = new Date(`${task.date}T00:00:00`);
@@ -307,6 +377,39 @@ form.addEventListener("submit", (event) => {
   document.querySelector("#date-input").value = selectedDate;
   render();
 });
+
+document.addEventListener("click", closeContextMenu);
+
+contextMenu.addEventListener("click", (event) => {
+  const button = event.target.closest("button");
+  if (!button) return;
+  const iso = contextMenu.dataset.iso;
+  closeContextMenu();
+  if (button.dataset.action === "quick-event") quickCreateTask(iso, "matter");
+  if (button.dataset.action === "quick-task") quickCreateTask(iso, "revision");
+  if (button.dataset.action === "focus-day") quickCreateFocusDay(iso);
+  if (button.dataset.action === "note") {
+    selectedDate = iso;
+    render();
+    openDayModal(iso);
+    window.setTimeout(() => dailyNoteInput.focus(), 80);
+  }
+});
+
+function openContextMenu(event, iso) {
+  event.preventDefault();
+  event.stopPropagation();
+  contextMenu.dataset.iso = iso;
+  contextMenu.style.left = `${Math.min(event.clientX, window.innerWidth - 210)}px`;
+  contextMenu.style.top = `${Math.min(event.clientY, window.innerHeight - 190)}px`;
+  contextMenu.classList.add("open");
+  contextMenu.setAttribute("aria-hidden", "false");
+}
+
+function closeContextMenu() {
+  contextMenu.classList.remove("open");
+  contextMenu.setAttribute("aria-hidden", "true");
+}
 
 function loadTasks() {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -348,6 +451,26 @@ function loadDailyNotes() {
   }
 }
 
+function loadPersonalSettings() {
+  const defaults = {
+    name: "",
+    dailyLimit: 8,
+    weekStartsOn: "monday",
+    tone: "gentle",
+    theme: "fresh"
+  };
+  try {
+    return { ...defaults, ...JSON.parse(localStorage.getItem(PERSONAL_SETTINGS_KEY) || "{}") };
+  } catch {
+    return defaults;
+  }
+}
+
+function savePersonalSettings() {
+  localStorage.setItem(PERSONAL_SETTINGS_KEY, JSON.stringify(personalSettings));
+  markLocalUpdated();
+}
+
 function loadStudyProjects() {
   const saved = localStorage.getItem(STUDY_PROJECTS_KEY);
   if (saved) {
@@ -363,6 +486,11 @@ function loadStudyProjects() {
 function normalizeStudyProjects(projects) {
   projects.forEach((project) => {
     if (!Array.isArray(project.planDays)) project.planDays = [];
+    if (!project.color) project.color = defaultProjectColors[0];
+    if (!project.examDate && project.deadline) project.examDate = project.deadline;
+    if (!project.examDate) project.examDate = toISO(addDays(today, 30));
+    if (!project.planCount) project.planCount = 7;
+    if (!Array.isArray(project.modules)) project.modules = [{ name: "任务", items: [] }];
   });
   const qbus = projects.find((project) => project.id === "qbus5001");
   if (qbus) {
@@ -481,6 +609,29 @@ function buildSeedTasks() {
   return [];
 }
 
+function projectById(projectId) {
+  return studyProjects.find((project) => project.id === projectId);
+}
+
+function projectColor(projectId, fallback = "") {
+  return projectById(projectId)?.color || fallback || "";
+}
+
+function renderProjectSelects() {
+  const selects = [document.querySelector("#project-input")].filter(Boolean);
+  selects.forEach((select) => {
+    const previous = select.value;
+    select.innerHTML = `<option value="">不归属项目</option>`;
+    studyProjects.forEach((project) => {
+      const option = document.createElement("option");
+      option.value = project.id;
+      option.textContent = project.name;
+      select.append(option);
+    });
+    select.value = previous;
+  });
+}
+
 function saveTasks() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
   markLocalUpdated();
@@ -525,99 +676,79 @@ function ensureFinalTasks(items) {
   return items;
 }
 
+function addProject({ name, color, deadline, planCount, hours }) {
+  const cleanName = name.trim();
+  if (!cleanName) return null;
+  const project = {
+    id: `project-${Date.now()}`,
+    name: cleanName,
+    color: color || defaultProjectColors[studyProjects.length % defaultProjectColors.length],
+    examDate: deadline || toISO(addDays(today, 30)),
+    dailyGoal: Number(personalSettings.dailyLimit || 8),
+    planCount: Math.max(1, Number(planCount || 7)),
+    planDays: [],
+    modules: [
+      {
+        name: "拆分任务",
+        items: hours ? [item(`task-${Date.now()}`, `${cleanName} 总任务`, parseHours(String(hours)), { custom: true })] : []
+      }
+    ]
+  };
+  studyProjects.push(project);
+  saveStudyProjects();
+  render();
+  return project;
+}
+
+function addQuickProject() {
+  const name = prompt("计划项目名称，例如 SQL / 考公行测 / 雅思写作");
+  if (!name) return;
+  const deadline = prompt("deadline（格式 2026-10-01）");
+  const hours = prompt("预计总小时数，例如 30 或 12h 30m");
+  const color = prompt("颜色（可选，例如 #8f79d6）") || defaultProjectColors[studyProjects.length % defaultProjectColors.length];
+  const project = addProject({ name, deadline, hours, color, planCount: 7 });
+  if (project) {
+    showCelebration(`已创建 ${project.name}`);
+    openCourseEditor(project);
+  }
+}
+
+function quickCreateTask(iso, type = "matter") {
+  const title = prompt(type === "revision" ? "这天要做什么？" : "新日程标题");
+  if (!title) return;
+  const projectId = chooseProjectId();
+  tasks.push({
+    id: crypto.randomUUID(),
+    title: title.trim(),
+    date: iso,
+    due: "",
+    type,
+    note: "右键快速添加",
+    done: false,
+    sourceProjectId: projectId,
+    color: projectColor(projectId)
+  });
+  selectedDate = iso;
+  saveTasks();
+  render();
+}
+
+function chooseProjectId() {
+  if (!studyProjects.length) return "";
+  const names = studyProjects.map((project, index) => `${index + 1}. ${project.name}`).join("\n");
+  const answer = prompt(`归属哪个计划项目？留空就是普通事项。\n${names}`);
+  const index = Number(answer) - 1;
+  return studyProjects[index]?.id || "";
+}
+
+function quickCreateFocusDay(iso) {
+  const projectId = chooseProjectId();
+  if (!projectId) return;
+  createFocusMarker(projectId, iso);
+}
+
 function buildStudyProjects() {
-  return [
-    {
-      id: "qbus5001",
-      name: "QBUS5001",
-      color: "#d96f67",
-      examDate: "2026-06-12",
-      dailyGoal: 5.5,
-      planCount: 8,
-      planDays: [],
-      modules: [
-        {
-          name: "领航课",
-          items: [
-            item("q5-nav-06", "期中06 - One population estimation (Week 6)", 1, { long: true }),
-            item("q5-nav-07", "期中07 - Two population estimation (Week 9)", 1, { long: true }),
-            item("q5-nav-08", "期中08 - Special topics in estimation (Week 6)", 0.63, { long: true }),
-            item("q5-final-01", "期末01 - Framework", 0.33),
-            item("q5-final-02", "期末02 - Review of midterm (Week 5 & 6)", 0.65, { long: true }),
-            item("q5-final-03", "期末03 - Hypothesis testing (W8 & W9)", 3.28, { long: true }),
-            item("q5-final-04", "期末04 - ANOVA basics (W10-12)", 0.35, { long: true }),
-            item("q5-final-05", "05 - ANOVA analysis optional", 1.72, { long: true }),
-            item("q5-final-06", "06 - Other hypothesis testing types (W9)", 0.18, { long: true }),
-            item("q5-final-07", "07 - Correlation analysis (W10-12)", 0.67, { long: true }),
-            item("q5-final-08", "08 - Simple regression & hypothesis testing", 2.88, { long: true }),
-            item("q5-final-09", "09 - Multiple regression", 2.92, { long: true }),
-            item("q5-final-10", "10 - Assumptions in regression", 1.23, { long: true }),
-            item("q5-final-11", "11 - Special regression types", 0.43, { long: true })
-          ]
-        },
-        {
-          name: "课件复习",
-          items: [
-            item("q5-review-slides", "复习课件", 3)
-          ]
-        },
-        {
-          name: "Sample exam 两天",
-          items: [
-            item("q5-paper-day-1", "D7 - sample exam day 1：写试卷 + 改试卷", 5.5, { long: true }),
-            item("q5-paper-day-2", "D8 - sample exam day 2：写试卷 + 改试卷", 5.5, { long: true })
-          ]
-        }
-      ]
-    },
-    {
-      id: "buss6002",
-      name: "BUSS6002",
-      color: "#86b998",
-      examDate: "2026-06-17",
-      dailyGoal: 5.4,
-      planCount: 12,
-      planDays: [],
-      modules: [
-        {
-          name: `Review session x ${BUSS_REVIEW_SESSION_COUNT}`,
-          items: Array.from(
-            { length: BUSS_REVIEW_SESSION_COUNT },
-            (_, index) => item(`b6-review-${index + 1}`, `W${index + 1} Review session`, BUSS_REVIEW_TOTAL_HOURS / BUSS_REVIEW_SESSION_COUNT)
-          )
-        },
-        {
-          name: "Sample exam",
-          items: Array.from({ length: 6 }, (_, index) => item(`b6-paper-${index + 1}`, `Paper ${index + 1}`, 3))
-        },
-        {
-          name: "Cheatsheet",
-          items: [
-            item("b6-cheat-1", "Cheatsheet 初稿", 2),
-            item("b6-cheat-2", "Cheatsheet 压缩整理", 2),
-            item("b6-cheat-3", "Cheatsheet 最终检查", 1)
-          ]
-        },
-        {
-          name: "HD同步课",
-          items: [
-            item("b6-hd-mid-1", "期中1", 2),
-            item("b6-hd-mid-2", "期中2", 2.07),
-            ...Array.from({ length: 11 }, (_, index) => item(`b6-hd-${index + 1}`, `同步课 ${index + 1}`, 1.5)),
-            item("b6-hd-final", "期末课", 1.5)
-          ]
-        },
-        {
-          name: "领航课",
-          items: [item("b6-nav-final", "期末领航课", 8)]
-        },
-        {
-          name: "时间打卡表",
-          items: Array.from({ length: 12 }, (_, index) => item(`b6-day-${index + 1}`, `D${index + 1}`, 0))
-        }
-      ]
-    }
-  ];
+  return [];
 }
 
 function item(id, title, hours, options = {}) {
@@ -701,12 +832,20 @@ function isStudyCalendarTask(task) {
 function render() {
   monthLabel.textContent = monthTitle(visibleMonth);
   dailyTarget.textContent = formatDuration(overallDailySafety(toISO(today)));
+  dailyTargetNote.textContent = `全部计划项目 · 个人上限 ${formatDuration(Number(personalSettings.dailyLimit || 8))}/天`;
   weeklyHours.textContent = formatDuration(weeklyStudyHours());
+  renderProjectSelects();
+  document.querySelector("#week-mode").classList.toggle("active", calendarMode === "week");
+  document.querySelector("#month-mode").classList.toggle("active", calendarMode === "month");
   grid.innerHTML = "";
 
-  [visibleMonth, new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1)].forEach((monthDate, index) => {
-    grid.append(renderMonthSection(monthDate, index === 0));
-  });
+  if (calendarMode === "week") {
+    grid.append(renderWeekSection(selectedDate));
+  } else {
+    [visibleMonth, new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1)].forEach((monthDate, index) => {
+      grid.append(renderMonthSection(monthDate, index === 0));
+    });
+  }
 
   renderDetail();
   renderToday();
@@ -745,6 +884,7 @@ function renderMonthSection(monthDate, isFirstMonth) {
     cell.classList.toggle("has-focus-day", focusMarkers.length > 0);
     if (focusMarkers[0]) cell.style.setProperty("--focus-color", focusMarkers[0].project.color);
     cell.setAttribute("aria-label", `${formatDate(iso, { weekday: true })}, ${items.length} 个事项`);
+    cell.addEventListener("contextmenu", (event) => openContextMenu(event, iso));
     cell.addEventListener("click", () => {
       selectedDate = iso;
       document.querySelector("#date-input").value = iso;
@@ -799,6 +939,8 @@ function renderMonthSection(monthDate, isFirstMonth) {
       event.classList.toggle("done", task.done);
       event.classList.toggle("is-due", task.due === iso && task.due !== task.date);
       event.dataset.type = task.type;
+      const color = task.color || projectColor(task.sourceProjectId);
+      if (color) event.style.setProperty("--event-color", color);
       const dueText = task.due === iso && task.due !== task.date ? " 截止" : "";
       event.draggable = Boolean(task.sourceStudyId);
       event.addEventListener("dragstart", (dragEvent) => {
@@ -834,6 +976,82 @@ function renderMonthSection(monthDate, isFirstMonth) {
     monthGrid.append(cell);
   });
   section.append(weekdays, monthGrid);
+  return section;
+}
+
+function renderWeekSection(anchorIso) {
+  const anchor = startOfDay(new Date(`${anchorIso}T00:00:00`));
+  const start = addDays(anchor, -((anchor.getDay() + 6) % 7));
+  const section = document.createElement("section");
+  section.className = "week-section";
+  section.innerHTML = `
+    <div class="week-title">
+      <div>
+        <p class="eyebrow">Week plan</p>
+        <h3>${formatDate(toISO(start))} - ${formatDate(toISO(addDays(start, 6)))}</h3>
+      </div>
+      <button type="button" class="print-week">打印本周</button>
+    </div>
+    <div class="week-grid"></div>
+  `;
+  section.querySelector(".print-week").addEventListener("click", () => {
+    printMode = "week";
+    renderPrintLayout();
+    window.print();
+  });
+  const gridEl = section.querySelector(".week-grid");
+  Array.from({ length: 7 }, (_, index) => addDays(start, index)).forEach((day) => {
+    const iso = toISO(day);
+    const items = tasksForDate(iso);
+    const budget = dayStudyHours(iso);
+    const safety = daySafetyRequirement(iso);
+    const card = document.createElement("article");
+    card.className = "week-day";
+    card.classList.toggle("is-selected", iso === selectedDate);
+    card.addEventListener("click", () => {
+      selectedDate = iso;
+      document.querySelector("#date-input").value = iso;
+      render();
+      openDayModal(iso);
+    });
+    card.addEventListener("contextmenu", (event) => openContextMenu(event, iso));
+    card.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      setDropTarget(card);
+    });
+    card.addEventListener("drop", (event) => {
+      event.preventDefault();
+      clearDropTarget();
+      const payload = readDragPayload(event);
+      if (!payload) return;
+      if (payload.kind === "study-item") scheduleStudyItem(payload, iso);
+      if (payload.kind === "calendar-task") moveCalendarTask(payload.taskId, iso);
+      if (payload.kind === "focus-marker") moveFocusMarker(payload.projectId, payload.focus, iso);
+      if (payload.kind === "focus-course") createFocusMarker(payload.projectId, iso);
+    });
+    card.innerHTML = `
+      <header>
+        <strong>${new Intl.DateTimeFormat("zh-CN", { weekday: "short" }).format(day)}</strong>
+        <span>${day.getMonth() + 1}/${day.getDate()}</span>
+      </header>
+      <div class="week-safe ${budget.total >= safety ? "safe" : "under"}">${formatDuration(budget.total)} / ${formatDuration(safety)}</div>
+      <div class="week-items"></div>
+    `;
+    const list = card.querySelector(".week-items");
+    if (!items.length) {
+      list.innerHTML = `<p>留白也是一种安排。</p>`;
+    } else {
+      items.slice(0, 8).forEach((task) => {
+        const row = document.createElement("div");
+        row.className = "week-item";
+        row.classList.toggle("done", task.done);
+        row.style.setProperty("--event-color", task.color || projectColor(task.sourceProjectId) || "var(--accent)");
+        row.textContent = `${task.startTime ? `${task.startTime} ` : ""}${task.title}`;
+        list.append(row);
+      });
+    }
+    gridEl.append(card);
+  });
   return section;
 }
 
@@ -915,6 +1133,33 @@ function emptyState(text) {
   `;
 }
 
+function initOnboarding() {
+  if (localStorage.getItem(TUTORIAL_KEY)) return;
+  window.setTimeout(() => openOnboarding(false), 500);
+}
+
+function openOnboarding(force = false) {
+  if (!force && localStorage.getItem(TUTORIAL_KEY)) return;
+  onboardingIndex = 0;
+  renderOnboardingStep();
+  onboarding.classList.add("open");
+  onboarding.setAttribute("aria-hidden", "false");
+}
+
+function renderOnboardingStep() {
+  const step = onboardingSteps[onboardingIndex];
+  onboardingProgress.textContent = `${onboardingIndex + 1}/${onboardingSteps.length}`;
+  onboardingTitle.textContent = step.title;
+  onboardingStep.textContent = step.copy;
+  onboardingNext.textContent = onboardingIndex === onboardingSteps.length - 1 ? "开始规划" : "下一步";
+}
+
+function closeOnboarding() {
+  localStorage.setItem(TUTORIAL_KEY, "true");
+  onboarding.classList.remove("open");
+  onboarding.setAttribute("aria-hidden", "true");
+}
+
 function renderCommandBoard() {
   const iso = selectedDate;
   const focus = focusSummaryForDate(iso);
@@ -953,6 +1198,8 @@ function renderFocusDayItems(iso) {
     button.className = "focus-day-task";
     button.classList.toggle("done", task.done);
     button.dataset.type = task.type;
+    const color = task.color || projectColor(task.sourceProjectId);
+    if (color) button.style.setProperty("--event-color", color);
     const timeText = task.startTime ? `${task.startTime}${task.endTime ? `-${task.endTime}` : ""} · ` : "";
     const hoursText = task.estimatedHours ? ` · ${formatDuration(task.estimatedHours)}` : "";
     button.innerHTML = `<span class="dot"></span><span>${escapeHTML(timeText)}${escapeHTML(task.title)}${escapeHTML(hoursText)}</span>`;
@@ -990,7 +1237,7 @@ function renderPressureList() {
     row.innerHTML = `
       <div>
         <strong>${project.name}</strong>
-        <p>剩 ${formatDuration(summary.remaining)} · ${summary.remainingDays} 个复习日</p>
+        <p>剩 ${formatDuration(summary.remaining)} · ${summary.remainingDays} 个计划日</p>
       </div>
       <span>${formatDuration(summary.dailyNeed)}/天</span>
       <em>${level.title}</em>
@@ -1003,9 +1250,11 @@ function renderTask(task) {
   const node = template.content.firstElementChild.cloneNode(true);
   node.dataset.type = task.type;
   node.classList.toggle("done", task.done);
+  const color = task.color || projectColor(task.sourceProjectId);
+  if (color) node.style.setProperty("--event-color", color);
   if (task.sourceStudyId) {
     node.draggable = true;
-    node.title = "拖回右侧复习任务池可以收回";
+    node.title = "拖回右侧计划任务池可以收回";
     node.addEventListener("dragstart", (event) => {
       const payload = { kind: "calendar-task", taskId: task.id };
       startDraggingStudy(event, payload);
@@ -1026,6 +1275,13 @@ function renderTask(task) {
 function renderStudy() {
   courseRings.innerHTML = "";
   studyPool.innerHTML = "";
+
+  const addProjectCard = document.createElement("button");
+  addProjectCard.type = "button";
+  addProjectCard.className = "add-project-card";
+  addProjectCard.innerHTML = `<strong>+ 新建计划项目</strong><span>SQL、考公、证书、项目交付，都可以拆成每天的时间。</span>`;
+  addProjectCard.addEventListener("click", addQuickProject);
+  studyPool.append(addProjectCard);
 
   studyProjects.forEach((project) => {
     const summary = projectSummary(project);
@@ -1161,7 +1417,7 @@ function renderCourseRing(project, summary) {
     <div class="ring"><strong>${formatDuration(summary.remaining)}</strong></div>
     <div>
       <h3>${project.name}</h3>
-      <p>动态安全线 ${formatDuration(summary.dailyNeed)}/天 · 剩 ${summary.remainingDays} 个复习日</p>
+      <p>动态安全线 ${formatDuration(summary.dailyNeed)}/天 · 剩 ${summary.remainingDays} 个计划日</p>
       <div class="progress-line"><span style="width: ${progress}%"></span></div>
     </div>
   `;
@@ -1183,6 +1439,10 @@ function toggleStudyItem(project, module, task) {
       type: "revision",
       note: `${module.name} · 完成 ${formatDuration(task.hours)}，剩余小时已减少。`,
       done: true,
+      sourceProjectId: project.id,
+      sourceStudyId: task.id,
+      sourceModule: module.name,
+      color: project.color,
       estimatedHours: task.hours
     });
     saveTasks();
@@ -1240,16 +1500,59 @@ function openCourseEditor(project) {
   activeCourseId = project.id;
   courseEditor.querySelector("#course-editor-title").textContent = `编辑 ${project.name}`;
   courseEditorBody.innerHTML = "";
+  const meta = document.createElement("section");
+  meta.className = "editor-module project-meta-editor";
+  meta.innerHTML = `
+      <div class="module-head">
+        <h3>项目信息</h3>
+      <div class="button-row">
+        <button type="button" class="project-save">保存项目</button>
+        <button type="button" class="project-delete">删除项目</button>
+      </div>
+    </div>
+    <div class="project-meta-grid">
+      <label>名称<input id="project-name-edit" type="text" value="${escapeAttribute(project.name)}"></label>
+      <label>颜色<input id="project-color-edit" type="color" value="${escapeAttribute(project.color)}"></label>
+      <label>Deadline<input id="project-deadline-edit" type="date" value="${escapeAttribute(project.examDate)}"></label>
+      <label>计划天数<input id="project-days-edit" type="number" min="1" max="365" value="${escapeAttribute(project.planCount)}"></label>
+    </div>
+  `;
+  meta.querySelector(".project-save").addEventListener("click", () => {
+    project.name = meta.querySelector("#project-name-edit").value.trim() || project.name;
+    project.color = meta.querySelector("#project-color-edit").value || project.color;
+    project.examDate = meta.querySelector("#project-deadline-edit").value || project.examDate;
+    project.planCount = Math.max(1, Number(meta.querySelector("#project-days-edit").value || project.planCount));
+    tasks.forEach((task) => {
+      if (task.sourceProjectId === project.id) task.color = project.color;
+    });
+    saveStudyProjects();
+    saveTasks();
+    render();
+    openCourseEditor(project);
+    showCelebration("项目已更新");
+  });
+  meta.querySelector(".project-delete").addEventListener("click", () => deleteProject(project));
+  courseEditorBody.append(meta);
   project.modules.forEach((module) => {
     const section = document.createElement("section");
     section.className = "editor-module";
     section.innerHTML = `
       <div class="module-head">
-        <h3>${module.name}</h3>
-        <button type="button" class="module-add">加任务</button>
+        <input class="module-name-input" type="text" value="${escapeAttribute(module.name)}" aria-label="模块名称">
+        <div class="button-row">
+          <button type="button" class="module-save">保存模块</button>
+          <button type="button" class="module-add">加任务</button>
+        </div>
       </div>
       <div class="editor-list"></div>
     `;
+    section.querySelector(".module-save").addEventListener("click", () => {
+      module.name = section.querySelector(".module-name-input").value.trim() || module.name;
+      saveStudyProjects();
+      saveAllCustomStudy();
+      render();
+      openCourseEditor(project);
+    });
     section.querySelector(".module-add").addEventListener("click", () => addStudyItemToModule(project, module));
     const list = section.querySelector(".editor-list");
     module.items.forEach((studyItem) => {
@@ -1277,6 +1580,20 @@ function openCourseEditor(project) {
   courseEditorBody.append(addModule);
   courseEditor.classList.add("open");
   courseEditor.setAttribute("aria-hidden", "false");
+}
+
+function deleteProject(project) {
+  if (!safeConfirm(`删除「${project.name}」和它的计划任务？`)) return;
+  const index = studyProjects.findIndex((item) => item.id === project.id);
+  if (index >= 0) studyProjects.splice(index, 1);
+  tasks = tasks.filter((task) => task.sourceProjectId !== project.id);
+  delete studyProgress[project.id];
+  saveTasks();
+  saveStudyProgress();
+  saveStudyProjects();
+  closeCourseEditor();
+  render();
+  showCelebration("项目已删除");
 }
 
 function closeCourseEditor() {
@@ -1321,8 +1638,9 @@ function riskCopy(summary) {
 }
 
 function pressureLevel(hours) {
-  if (hours > 8) return { title: "很累", copy: "已经超过 8h，这就是前面偷懒的利息。" };
-  if (hours > 6) return { title: "紧迫", copy: "超过 6h 了，今天最好认真推进一点。" };
+  const limit = Number(personalSettings.dailyLimit || 8);
+  if (hours > limit) return { title: "很累", copy: `已经超过 ${formatDuration(limit)}，今天要认真取舍。` };
+  if (hours > Math.max(limit * 0.75, 4)) return { title: "紧迫", copy: "已经接近上限，今天最好认真推进一点。" };
   if (hours > 4) return { title: "可控", copy: "还行，但别再继续往后拖。" };
   if (hours > 0) return { title: "轻稳", copy: "今天推进一点，后面会舒服很多。" };
   return { title: "未选择", copy: "先选主攻日，软件再给你算压力。" };
@@ -1368,7 +1686,7 @@ function focusSummaryForDate(iso) {
     summary,
     dailyNeed: summary.dailyNeed,
     label: `${marker.project.name} · ${marker.day.focus}`,
-    copy: "这是当天主攻课程；具体学什么仍由你拖任务决定。"
+    copy: "这是当天主攻项目；具体做什么仍由你拖任务决定。"
   };
 }
 
@@ -1396,9 +1714,7 @@ function daySafetyRequirement(iso) {
 }
 
 function overallDailySafety(fromIso) {
-  const remaining = studyProjects.reduce((sum, project) => sum + projectSummaryForDate(project, fromIso).remaining, 0);
-  const days = combinedStudyDaysLeft(fromIso);
-  return days ? remaining / days : remaining;
+  return studyProjects.reduce((sum, project) => sum + projectSummaryForDate(project, fromIso).dailyNeed, 0);
 }
 
 function combinedStudyDaysLeft(fromIso) {
@@ -1639,7 +1955,7 @@ function openDayModal(iso) {
   dayModalTitle.textContent = formatDate(iso, { weekday: true });
   const budget = dayStudyHours(iso);
   const safety = daySafetyRequirement(iso);
-  daySafeLine.textContent = `学习时长 ${formatDuration(budget.total)} / 合并安全线 ${formatDuration(safety)}（5001+6002 到 6/16）`;
+  daySafeLine.textContent = `已安排 ${formatDuration(budget.total)} / 动态安全线 ${formatDuration(safety)}（所有计划项目）`;
   daySafeLine.className = budget.total >= safety ? "safe" : "under";
   dayModalList.innerHTML = "";
   const items = tasksForDate(iso);
@@ -1675,15 +1991,46 @@ function renderMenuOutput(view) {
   const openTasks = tasks.filter((task) => !task.done);
   const backupName = `日有回响-backup-${toISO(today)}.json`;
   const summaries = {
-    calendar: `<h3>日历</h3><p>月视图、日期详情、拖拽安排、时间设置都在主屏完成。</p>`,
-    tasks: `<h3>任务列表</h3><p>当前未完成 ${openTasks.length} 件。学校硬DDL、作业、复习、事项都会出现在日历里。</p>`,
-    study: `<h3>复习项目</h3><p>QBUS5001 和 BUSS6002 会根据剩余小时和剩余复习日实时计算动态安全线。</p>`,
+    calendar: `<h3>日历</h3><p>月视图负责看全局；右键任意日期可以快速添加日程、任务、计划日或备注。</p>`,
+    week: `<h3>周计划</h3><p>周视图负责真正安排这一周：每天已安排多少小时、安全线多少、任务是否过载都能直接看见。</p>`,
+    tasks: `<h3>任务列表</h3><p>当前未完成 ${openTasks.length} 件。硬DDL、作业、计划项目、事项都会出现在日历里。</p>`,
+    study: `<h3>计划项目</h3><p>任何有 deadline 和预计小时数的事情都可以创建成计划项目，例如 SQL、考公、雅思、证书和工作交付。</p><div class="backup-actions"><button id="add-project" type="button">新建计划项目</button></div>`,
     monthly: `<h3>月度总结</h3><p>本月共有 ${monthItems.length} 个日历记录，已完成 ${monthItems.filter((task) => task.done).length} 个，复习记录 ${formatDuration(studyHours)}。</p>`,
-    yearly: `<h3>年度总结</h3><p>今年正在积累你的学习、作业、事项和复习痕迹。后面可以接 AI 生成 Krissy 年度状态。</p>`,
+    yearly: `<h3>年度总结</h3><p>今年正在积累你的学习、作业、事项和计划痕迹。后面可以接 AI 生成个人年度状态。</p>`,
     inbox: `<h3>邮件导入</h3><p>下一步可以做成：粘贴 Outlook/网易邮件内容，自动识别时间和事项，一键加入日历。</p>`,
+    settings: `
+      <h3>设置</h3>
+      <p>这些设置会影响安全线、默认视图和新手教程。</p>
+      <div class="settings-grid">
+        <label>昵称<input id="settings-name" type="text" value="${escapeAttribute(personalSettings.name)}" placeholder="例如 Krissy"></label>
+        <label>每日时间上限<input id="settings-limit" type="number" min="1" max="16" step="0.5" value="${escapeAttribute(personalSettings.dailyLimit)}"></label>
+        <label>语气<select id="settings-tone">
+          <option value="gentle" ${personalSettings.tone === "gentle" ? "selected" : ""}>温柔推进</option>
+          <option value="sharp" ${personalSettings.tone === "sharp" ? "selected" : ""}>清醒一点</option>
+          <option value="quiet" ${personalSettings.tone === "quiet" ? "selected" : ""}>安静模式</option>
+        </select></label>
+        <label>主题<select id="settings-theme">
+          <option value="fresh" ${personalSettings.theme === "fresh" ? "selected" : ""}>小清新</option>
+          <option value="paper" ${personalSettings.theme === "paper" ? "selected" : ""}>纸感</option>
+          <option value="studio" ${personalSettings.theme === "studio" ? "selected" : ""}>工作室</option>
+        </select></label>
+      </div>
+      <div class="backup-actions">
+        <button id="save-settings" type="button">保存设置</button>
+        <button id="replay-onboarding" type="button">重播新手教程</button>
+      </div>
+    `,
+    me: `
+      <h3>我</h3>
+      <p>${personalSettings.name ? `${escapeHTML(personalSettings.name)} 的` : "你的"}时间不是拿来被 deadline 追着跑的，是拿来被你分配的。</p>
+      <div class="print-actions">
+        <button id="print-month" type="button">打印月计划 PDF</button>
+        <button id="print-week-from-menu" type="button">打印周计划 PDF</button>
+      </div>
+    `,
     data: `
       <h3>数据保险箱</h3>
-      <p>导出会保存日历事项、完成状态、复习进度、主攻日、今日备注和课程编辑。换链接或换浏览器前先导出一次。</p>
+      <p>导出会保存日历事项、完成状态、项目进度、主攻日、今日备注和项目编辑。换链接或换浏览器前先导出一次。</p>
       <div class="backup-actions">
         <button id="export-backup" type="button">导出 ${backupName}</button>
         <button id="import-backup" type="button">导入备份</button>
@@ -1723,6 +2070,9 @@ for update using (true) with check (true);</pre>
     `
   };
   menuOutput.innerHTML = summaries[view] || summaries.monthly;
+  if (view === "study") {
+    document.querySelector("#add-project").addEventListener("click", addQuickProject);
+  }
   if (view === "data") {
     document.querySelector("#export-backup").addEventListener("click", exportDataBackup);
     document.querySelector("#import-backup").addEventListener("click", () => backupFileInput.click());
@@ -1730,6 +2080,34 @@ for update using (true) with check (true);</pre>
     document.querySelector("#push-cloud").addEventListener("click", () => pushCloudSnapshot({ manual: true }));
     document.querySelector("#pull-cloud").addEventListener("click", () => pullCloudSnapshot({ manual: true }));
   }
+  if (view === "settings") {
+    document.querySelector("#save-settings").addEventListener("click", saveSettingsFromMenu);
+    document.querySelector("#replay-onboarding").addEventListener("click", () => openOnboarding(true));
+  }
+  if (view === "me") {
+    document.querySelector("#print-month").addEventListener("click", () => printCalendar("month"));
+    document.querySelector("#print-week-from-menu").addEventListener("click", () => printCalendar("week"));
+  }
+}
+
+function saveSettingsFromMenu() {
+  personalSettings = {
+    ...personalSettings,
+    name: document.querySelector("#settings-name").value.trim(),
+    dailyLimit: Number(document.querySelector("#settings-limit").value || 8),
+    tone: document.querySelector("#settings-tone").value,
+    theme: document.querySelector("#settings-theme").value
+  };
+  savePersonalSettings();
+  render();
+  openAppMenu("settings");
+  showCelebration("设置已保存");
+}
+
+function printCalendar(mode) {
+  printMode = mode;
+  renderPrintLayout();
+  window.print();
 }
 
 function exportDataBackup() {
@@ -1756,6 +2134,7 @@ function currentDataBackup() {
       [DAILY_NOTES_KEY]: dailyNotes,
       [CUSTOM_STUDY_KEY]: JSON.parse(localStorage.getItem(CUSTOM_STUDY_KEY) || "[]"),
       [STUDY_PROJECTS_KEY]: studyProjects,
+      [PERSONAL_SETTINGS_KEY]: personalSettings,
       "somewhen-collapsed-courses-v1": [...collapsedCourses]
     }
   };
@@ -1783,7 +2162,7 @@ function importDataBackup(event) {
 
 function applyBackupData(data, updatedAt = new Date().toISOString()) {
   suppressPersistenceHooks = true;
-  const keys = [STORAGE_KEY, STUDY_KEY, DAILY_NOTES_KEY, CUSTOM_STUDY_KEY, STUDY_PROJECTS_KEY, "somewhen-collapsed-courses-v1"];
+  const keys = [STORAGE_KEY, STUDY_KEY, DAILY_NOTES_KEY, CUSTOM_STUDY_KEY, STUDY_PROJECTS_KEY, PERSONAL_SETTINGS_KEY, "somewhen-collapsed-courses-v1"];
   keys.forEach((key) => {
     if (data[key] !== undefined) localStorage.setItem(key, JSON.stringify(data[key]));
   });
@@ -2142,7 +2521,7 @@ function normalizePlanDayNumbers(project) {
 }
 
 function maxPlanDays(project) {
-  return Number(project.planCount || (project.id === "buss6002" ? 12 : 8));
+  return Number(project.planCount || 7);
 }
 
 function setTaskTime(task) {
@@ -2172,17 +2551,25 @@ function safeConfirm(message) {
 
 function renderPrintLayout() {
   printLayout.innerHTML = "";
+  if (printMode === "week") {
+    renderWeekPrintLayout();
+    return;
+  }
+  renderProjectPrintLayout();
+}
+
+function renderProjectPrintLayout() {
   studyProjects.forEach((project) => {
     const summary = projectSummary(project);
     const page = document.createElement("article");
     page.className = "print-page";
     page.style.setProperty("--print-color", project.color);
     page.innerHTML = `
-      <p class="eyebrow">Printable study checklist</p>
-      <h2>${project.name} Final 待办事项</h2>
-      <p>复习安排：${maxPlanDays(project)} 天 · 总学习量：${formatDuration(summary.total)}</p>
+      <p class="eyebrow">Printable plan checklist</p>
+      <h2>${project.name} 待办事项</h2>
+      <p>计划安排：${maxPlanDays(project)} 天 · 总学习量：${formatDuration(summary.total)} · Deadline ${project.examDate}</p>
       <div class="print-summary">
-        <div><strong>${maxPlanDays(project)}</strong><span>复习天数</span></div>
+        <div><strong>${maxPlanDays(project)}</strong><span>计划天数</span></div>
         <div><strong>${formatDuration(summary.total)}</strong><span>总时长</span></div>
       </div>
     `;
@@ -2218,6 +2605,47 @@ function renderPrintLayout() {
 
     printLayout.append(page);
   });
+}
+
+function renderWeekPrintLayout() {
+  const anchor = startOfDay(new Date(`${selectedDate}T00:00:00`));
+  const start = addDays(anchor, -((anchor.getDay() + 6) % 7));
+  const page = document.createElement("article");
+  page.className = "print-page print-week-page";
+  page.style.setProperty("--print-color", "#6d9b89");
+  page.innerHTML = `
+    <p class="eyebrow">Printable week plan</p>
+    <h2>${formatDate(toISO(start))} - ${formatDate(toISO(addDays(start, 6)))} 周计划</h2>
+    <p>每天写下要做的事，完成就划掉。时间会留下证据。</p>
+  `;
+  const weekGrid = document.createElement("div");
+  weekGrid.className = "print-week-grid";
+  Array.from({ length: 7 }, (_, index) => addDays(start, index)).forEach((day) => {
+    const iso = toISO(day);
+    const dayCard = document.createElement("section");
+    dayCard.className = "print-week-day";
+    const items = tasksForDate(iso);
+    dayCard.innerHTML = `<h3>${new Intl.DateTimeFormat("zh-CN", { weekday: "long", month: "numeric", day: "numeric" }).format(day)}</h3>`;
+    const list = document.createElement("div");
+    list.className = "print-checks";
+    if (!items.length) {
+      Array.from({ length: 5 }).forEach(() => {
+        const span = document.createElement("span");
+        span.textContent = "☐";
+        list.append(span);
+      });
+    } else {
+      items.forEach((task) => {
+        const span = document.createElement("span");
+        span.textContent = `${task.done ? "☑" : "☐"} ${task.title}${task.estimatedHours ? ` (${formatDuration(task.estimatedHours)})` : ""}`;
+        list.append(span);
+      });
+    }
+    dayCard.append(list);
+    weekGrid.append(dayCard);
+  });
+  page.append(weekGrid);
+  printLayout.append(page);
 }
 
 function printTaskTitle(module, task) {

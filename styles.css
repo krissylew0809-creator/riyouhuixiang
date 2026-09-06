@@ -189,6 +189,12 @@ h2 {
   line-height: 1;
 }
 
+.toolbar button.active {
+  border-color: rgba(109, 155, 137, 0.42);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 #expand-left,
 #expand-right {
   display: none;
@@ -490,7 +496,7 @@ textarea:focus {
 }
 
 .focus-day-task[data-type="revision"] .dot {
-  background: var(--revision);
+  background: var(--event-color, var(--revision));
 }
 
 .focus-day-task[data-type="exam"] .dot {
@@ -581,6 +587,103 @@ textarea:focus {
   color: var(--ink);
   font-size: 1.35rem;
   font-weight: 800;
+}
+
+.week-section {
+  display: grid;
+  gap: 12px;
+}
+
+.week-title {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.week-title h3 {
+  font-size: 1.35rem;
+}
+
+.week-title button,
+.add-project-card {
+  border: 1px solid rgba(109, 155, 137, 0.28);
+  border-radius: var(--radius);
+  background: rgba(230, 241, 235, 0.86);
+  color: var(--accent);
+  padding: 10px 12px;
+  font-weight: 820;
+}
+
+.week-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(130px, 1fr));
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.week-day {
+  min-height: 430px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.56);
+  padding: 10px;
+}
+
+.week-day.is-selected {
+  border-color: rgba(14, 111, 104, 0.38);
+  box-shadow: inset 0 0 0 1px rgba(14, 111, 104, 0.16);
+}
+
+.week-day header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--ink);
+  font-weight: 820;
+}
+
+.week-safe {
+  margin: 10px 0;
+  border-radius: 999px;
+  background: rgba(109, 155, 137, 0.12);
+  color: #55786c;
+  padding: 5px 8px;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.week-safe.under {
+  background: rgba(217, 111, 103, 0.12);
+  color: #a4534d;
+}
+
+.week-items {
+  display: grid;
+  gap: 6px;
+}
+
+.week-items p {
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  color: var(--muted);
+  padding: 10px;
+  font-size: 0.78rem;
+}
+
+.week-item {
+  border-left: 4px solid var(--event-color);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--event-color) 12%, white);
+  padding: 7px 8px;
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.week-item.done {
+  opacity: 0.62;
+  text-decoration: line-through;
 }
 
 .weekdays,
@@ -717,6 +820,7 @@ body.is-dragging-study .command-card {
 }
 
 .calendar-event {
+  --event-color: var(--revision);
   display: grid;
   grid-template-columns: 14px 1fr;
   gap: 5px;
@@ -739,8 +843,8 @@ body.is-dragging-study .command-card {
 }
 
 .calendar-event[data-type="revision"] {
-  background: rgba(185, 166, 212, 0.16);
-  border-color: rgba(185, 166, 212, 0.26);
+  background: color-mix(in srgb, var(--event-color) 15%, white);
+  border-color: color-mix(in srgb, var(--event-color) 28%, transparent);
 }
 
 .calendar-event[data-type="exam"] {
@@ -777,7 +881,7 @@ body.is-dragging-study .command-card {
 
 .calendar-event[data-type="revision"] .dot,
 .task-item[data-type="revision"] .check-button {
-  background: var(--revision);
+  background: var(--event-color, var(--revision));
 }
 
 .calendar-event[data-type="exam"] .dot,
@@ -1063,6 +1167,19 @@ body.is-dragging-study .command-card {
   border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.64);
   padding: 10px;
+}
+
+.add-project-card {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+}
+
+.add-project-card span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 680;
 }
 
 .ring {
@@ -1368,6 +1485,41 @@ body.is-dragging-study .command-card.primary::after {
   margin-top: 14px;
 }
 
+.print-actions,
+.settings-grid,
+.project-meta-grid {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.settings-grid,
+.project-meta-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.settings-grid label,
+.project-meta-grid label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 780;
+}
+
+.print-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.print-actions button {
+  min-height: 48px;
+  border: 1px solid rgba(109, 155, 137, 0.28);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 820;
+}
+
 .backup-actions button {
   min-height: 38px;
   border: 1px solid rgba(109, 155, 137, 0.28);
@@ -1467,6 +1619,13 @@ body.is-dragging-study .command-card.primary::after {
 .editor-row input {
   height: 34px;
   border-radius: 8px;
+}
+
+.module-name-input {
+  width: min(260px, 100%);
+  height: 36px;
+  border-radius: var(--radius);
+  font-weight: 820;
 }
 
 .editor-row strong {
@@ -1571,6 +1730,96 @@ body.is-dragging-study .command-card.primary::after {
   transform: translate(-50%, 0);
 }
 
+.context-menu {
+  position: fixed;
+  z-index: 35;
+  display: none;
+  width: 190px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow);
+  padding: 6px;
+}
+
+.context-menu.open {
+  display: grid;
+}
+
+.context-menu button {
+  min-height: 36px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  padding: 0 10px;
+  font-weight: 760;
+}
+
+.context-menu button:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.onboarding {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at 24% 18%, rgba(255, 255, 255, 0.92), transparent 30%),
+    rgba(53, 71, 65, 0.24);
+  padding: 18px;
+}
+
+.onboarding.open {
+  display: flex;
+}
+
+.onboarding-card {
+  width: min(480px, 100%);
+  border: 1px solid rgba(109, 155, 137, 0.22);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--shadow);
+  padding: 24px;
+}
+
+.onboarding-card h2 {
+  font-size: 1.8rem;
+  margin-bottom: 10px;
+}
+
+.onboarding-card p:not(.eyebrow) {
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.onboarding-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.onboarding-actions button {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.78);
+  padding: 0 14px;
+  font-weight: 820;
+}
+
+#next-onboarding {
+  border-color: rgba(109, 155, 137, 0.34);
+  background: var(--accent);
+  color: #fff;
+}
+
 @keyframes quickStrike {
   0% {
     transform: translateX(0);
@@ -1672,6 +1921,28 @@ body.is-dragging-study .command-card.primary::after {
 
 .print-checks.compact span {
   min-height: 24px;
+}
+
+.print-week-page {
+  grid-template-columns: 1fr;
+}
+
+.print-week-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.print-week-day {
+  border: 1px solid #d7d2c8;
+  border-radius: 8px;
+  padding: 8px;
+  break-inside: avoid;
+}
+
+.print-week-day h3 {
+  margin-bottom: 6px;
+  color: #161616;
 }
 
 @media (max-width: 1100px) {
