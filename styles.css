@@ -36,6 +36,26 @@ body {
   font-family: var(--font);
 }
 
+body[data-theme="paper"] {
+  --bg: #fbf8f0;
+  --surface: rgba(255, 252, 244, 0.82);
+  --line: rgba(96, 82, 56, 0.14);
+  background:
+    linear-gradient(135deg, rgba(238, 229, 207, 0.88), transparent 32%),
+    linear-gradient(315deg, rgba(224, 236, 225, 0.74), transparent 44%),
+    #fbf8f0;
+}
+
+body[data-theme="studio"] {
+  --bg: #f5f6f8;
+  --surface: rgba(255, 255, 255, 0.84);
+  --line: rgba(54, 64, 74, 0.13);
+  background:
+    linear-gradient(135deg, rgba(220, 229, 236, 0.82), transparent 34%),
+    linear-gradient(315deg, rgba(234, 224, 234, 0.68), transparent 42%),
+    #f7f8f9;
+}
+
 button,
 input,
 select,
@@ -164,10 +184,12 @@ h2 {
 
 .toolbar {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
 }
 
-.toolbar button,
+.tool-group,
 .section-head button,
 .chip {
   min-height: 36px;
@@ -178,21 +200,64 @@ h2 {
   box-shadow: var(--shadow-soft);
 }
 
+.tool-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+}
+
 .button-row {
   display: flex;
   gap: 6px;
 }
 
 .toolbar button {
-  width: 38px;
-  font-size: 1.5rem;
+  display: inline-grid;
+  place-items: center;
+  min-width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 820;
   line-height: 1;
+  box-shadow: none;
+}
+
+.toolbar .icon-button {
+  width: 34px;
+}
+
+.toolbar svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.toolbar button:hover {
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
 }
 
 .toolbar button.active {
-  border-color: rgba(109, 155, 137, 0.42);
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+.view-switch {
+  gap: 2px;
+}
+
+.view-switch button {
+  min-width: 42px;
+  padding: 0 10px;
 }
 
 #expand-left,
@@ -1448,9 +1513,23 @@ body.is-dragging-study .command-card.primary::after {
 
 .menu-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
   margin-bottom: 12px;
+}
+
+.menu-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.52);
+  padding: 10px;
+}
+
+.menu-group .eyebrow {
+  grid-column: 1 / -1;
 }
 
 .menu-grid button,
@@ -1767,25 +1846,37 @@ body.is-dragging-study .command-card.primary::after {
   inset: 0;
   z-index: 40;
   display: none;
-  align-items: center;
-  justify-content: center;
-  background:
-    radial-gradient(circle at 24% 18%, rgba(255, 255, 255, 0.92), transparent 30%),
-    rgba(53, 71, 65, 0.24);
-  padding: 18px;
+  background: rgba(33, 46, 43, 0.34);
+  pointer-events: auto;
 }
 
 .onboarding.open {
-  display: flex;
+  display: block;
+}
+
+.onboarding-spotlight {
+  position: fixed;
+  z-index: 41;
+  border: 2px solid var(--accent);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 0 0 9999px rgba(33, 46, 43, 0.26),
+    0 18px 52px rgba(35, 53, 49, 0.18);
+  transition: left 220ms ease, top 220ms ease, width 220ms ease, height 220ms ease;
+  pointer-events: none;
 }
 
 .onboarding-card {
+  position: fixed;
+  z-index: 42;
   width: min(480px, 100%);
   border: 1px solid rgba(109, 155, 137, 0.22);
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.94);
   box-shadow: var(--shadow);
   padding: 24px;
+  transition: left 220ms ease, top 220ms ease;
 }
 
 .onboarding-card h2 {
@@ -1818,6 +1909,10 @@ body.is-dragging-study .command-card.primary::after {
   border-color: rgba(109, 155, 137, 0.34);
   background: var(--accent);
   color: #fff;
+}
+
+.tour-target {
+  scroll-margin: 120px;
 }
 
 @keyframes quickStrike {

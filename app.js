@@ -34,6 +34,8 @@ const defaultProjectColors = ["#8f79d6", "#6d9b89", "#d96f67", "#dd914a", "#7c9d
 let calendarMode = "month";
 let printMode = "month";
 let personalSettings = loadPersonalSettings();
+calendarMode = personalSettings.defaultView || "month";
+printMode = calendarMode;
 
 const roasts = [
   "今天不用被安排，只要把要紧事放到看得见的地方。",
@@ -46,23 +48,28 @@ const roasts = [
 const onboardingSteps = [
   {
     title: "把 deadline 拆成时间",
-    copy: "创建一个计划项目，填 deadline 和预计小时数，日有回响会算出每天最低要推进多少。"
+    copy: "从这里创建一个计划项目，填 deadline、预计小时和计划天数，系统会算出每天最低要推进多少。",
+    target: "[data-tour='quick-add']"
   },
   {
-    title: "颜色就是你的分类语言",
-    copy: "SQL 可以是紫色，考公可以是绿色。项目里的小任务会继承颜色，日历一眼就能认出来。"
+    title: "这不是归属，是计划分类",
+    copy: "“属于哪个计划”表示这件事算进哪个大目标。比如窗口函数属于 SQL，套卷属于考公行测。",
+    target: "#project-input"
   },
   {
-    title: "右键日期，马上添加",
-    copy: "在月历或周历里右键某一天，可以新建日程、任务、计划日或当天备注。"
+    title: "在日历上直接安排",
+    copy: "右键任意日期可以快速添加日程、任务、计划日或备注。月历看全局，周计划看细节。",
+    target: "[data-tour='calendar']"
   },
   {
     title: "拖进去，也能拖回来",
-    copy: "任务池里的小项拖到日期就是安排；拖回右侧就是收回，完成后会划掉但不会消失。"
+    copy: "任务池里的小项拖到日期就是安排；拖回右侧就是收回，完成后会划掉但不会消失。",
+    target: "[data-tour='task-pool']"
   },
   {
-    title: "月计划和周计划都能打印",
-    copy: "需要纸质成就感时，在“我”里打印月计划或周计划，拿笔涂掉也算正式胜利。"
+    title: "设置和个人分开",
+    copy: "扳手只放系统设置；“我”放个人信息、打印和数据。工具入口各回各家，页面就不会乱。",
+    target: "#settings-button"
   }
 ];
 
@@ -124,6 +131,7 @@ const focusDayItems = document.querySelector("#focus-day-items");
 const pressureList = document.querySelector("#pressure-list");
 const contextMenu = document.querySelector("#context-menu");
 const onboarding = document.querySelector("#onboarding");
+const onboardingSpotlight = document.querySelector("#onboarding-spotlight");
 const onboardingStep = document.querySelector("#onboarding-step");
 const onboardingProgress = document.querySelector("#onboarding-progress");
 const onboardingTitle = document.querySelector("#onboarding-title");
@@ -139,9 +147,18 @@ let activeDropTarget = null;
 document.querySelector("#date-input").value = selectedDate;
 document.querySelector("#due-input").value = "";
 dailyTarget.textContent = formatDuration(overallDailySafety(toISO(today)));
+applyPersonalTheme();
 
 document.querySelector("#app-menu-button").addEventListener("click", () => {
-  openAppMenu("monthly");
+  openAppMenu("calendar");
+});
+
+document.querySelector("#settings-button").addEventListener("click", () => {
+  openAppMenu("settings");
+});
+
+document.querySelector("#me-button").addEventListener("click", () => {
+  openAppMenu("me");
 });
 
 document.querySelector("#week-mode").addEventListener("click", () => {
@@ -351,6 +368,10 @@ onboardingNext.addEventListener("click", () => {
 
 onboardingSkip.addEventListener("click", closeOnboarding);
 
+window.addEventListener("resize", () => {
+  if (onboarding.classList.contains("open")) positionOnboarding(onboardingSteps[onboardingIndex]);
+});
+
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   const data = new FormData(form);
@@ -456,8 +477,10 @@ function loadPersonalSettings() {
     name: "",
     dailyLimit: 8,
     weekStartsOn: "monday",
+    defaultView: "month",
     tone: "gentle",
-    theme: "fresh"
+    theme: "fresh",
+    accentColor: "#6d9b89"
   };
   try {
     return { ...defaults, ...JSON.parse(localStorage.getItem(PERSONAL_SETTINGS_KEY) || "{}") };
@@ -469,6 +492,23 @@ function loadPersonalSettings() {
 function savePersonalSettings() {
   localStorage.setItem(PERSONAL_SETTINGS_KEY, JSON.stringify(personalSettings));
   markLocalUpdated();
+}
+
+function applyPersonalTheme() {
+  const accent = personalSettings.accentColor || "#6d9b89";
+  document.body.dataset.theme = personalSettings.theme || "fresh";
+  document.documentElement.style.setProperty("--accent", accent);
+  document.documentElement.style.setProperty("--accent-soft", tintColor(accent, 0.86));
+  document.documentElement.style.setProperty("--accent-faint", tintColor(accent, 0.94));
+}
+
+function tintColor(hex, amount) {
+  const clean = String(hex || "").replace("#", "");
+  if (!/^[0-9a-f]{6}$/i.test(clean)) return "#e6f1eb";
+  const value = Number.parseInt(clean, 16);
+  const rgb = [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+  const mixed = rgb.map((channel) => Math.round(channel + (255 - channel) * amount));
+  return `#${mixed.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
 }
 
 function loadStudyProjects() {
@@ -621,7 +661,7 @@ function renderProjectSelects() {
   const selects = [document.querySelector("#project-input")].filter(Boolean);
   selects.forEach((select) => {
     const previous = select.value;
-    select.innerHTML = `<option value="">不归属项目</option>`;
+    select.innerHTML = `<option value="">普通事项，不属于计划</option>`;
     studyProjects.forEach((project) => {
       const option = document.createElement("option");
       option.value = project.id;
@@ -799,11 +839,12 @@ function monthTitle(date) {
 
 function monthDays(date) {
   const first = new Date(date.getFullYear(), date.getMonth(), 1);
-  const startOffset = (first.getDay() + 6) % 7;
+  const startOffset = personalSettings.weekStartsOn === "sunday" ? first.getDay() : (first.getDay() + 6) % 7;
   const start = new Date(first);
   start.setDate(first.getDate() - startOffset);
   const last = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-  const endOffset = (7 - ((last.getDay() + 6) % 7) - 1) % 7;
+  const lastOffset = personalSettings.weekStartsOn === "sunday" ? last.getDay() : (last.getDay() + 6) % 7;
+  const endOffset = (7 - lastOffset - 1) % 7;
   const totalDays = startOffset + last.getDate() + endOffset;
   return Array.from({ length: totalDays }, (_, index) => {
     const day = new Date(start);
@@ -830,6 +871,7 @@ function isStudyCalendarTask(task) {
 }
 
 function render() {
+  applyPersonalTheme();
   monthLabel.textContent = monthTitle(visibleMonth);
   dailyTarget.textContent = formatDuration(overallDailySafety(toISO(today)));
   dailyTargetNote.textContent = `全部计划项目 · 个人上限 ${formatDuration(Number(personalSettings.dailyLimit || 8))}/天`;
@@ -867,7 +909,7 @@ function renderMonthSection(monthDate, isFirstMonth) {
   const weekdays = document.createElement("div");
   weekdays.className = "weekdays";
   weekdays.setAttribute("aria-hidden", "true");
-  weekdays.innerHTML = "<span>周一</span><span>周二</span><span>周三</span><span>周四</span><span>周五</span><span>周六</span><span>周日</span>";
+  weekdays.innerHTML = weekLabels().map((label) => `<span>${label}</span>`).join("");
   const monthGrid = document.createElement("div");
   monthGrid.className = "calendar-grid";
   monthDays(monthDate).forEach((day) => {
@@ -981,7 +1023,7 @@ function renderMonthSection(monthDate, isFirstMonth) {
 
 function renderWeekSection(anchorIso) {
   const anchor = startOfDay(new Date(`${anchorIso}T00:00:00`));
-  const start = addDays(anchor, -((anchor.getDay() + 6) % 7));
+  const start = startOfWeek(anchor);
   const section = document.createElement("section");
   section.className = "week-section";
   section.innerHTML = `
@@ -1141,9 +1183,9 @@ function initOnboarding() {
 function openOnboarding(force = false) {
   if (!force && localStorage.getItem(TUTORIAL_KEY)) return;
   onboardingIndex = 0;
-  renderOnboardingStep();
   onboarding.classList.add("open");
   onboarding.setAttribute("aria-hidden", "false");
+  renderOnboardingStep();
 }
 
 function renderOnboardingStep() {
@@ -1152,12 +1194,45 @@ function renderOnboardingStep() {
   onboardingTitle.textContent = step.title;
   onboardingStep.textContent = step.copy;
   onboardingNext.textContent = onboardingIndex === onboardingSteps.length - 1 ? "开始规划" : "下一步";
+  positionOnboarding(step);
 }
 
 function closeOnboarding() {
   localStorage.setItem(TUTORIAL_KEY, "true");
   onboarding.classList.remove("open");
   onboarding.setAttribute("aria-hidden", "true");
+  document.querySelectorAll(".tour-target").forEach((item) => item.classList.remove("tour-target"));
+}
+
+function positionOnboarding(step) {
+  document.querySelectorAll(".tour-target").forEach((item) => item.classList.remove("tour-target"));
+  const target = document.querySelector(step.target);
+  if (!target) return;
+  target.classList.add("tour-target");
+  target.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+  window.setTimeout(() => placeOnboardingCard(target), 260);
+}
+
+function placeOnboardingCard(target) {
+  if (!onboarding.classList.contains("open")) return;
+  const rect = target.getBoundingClientRect();
+  const pad = 10;
+  onboardingSpotlight.style.left = `${Math.max(12, rect.left - pad)}px`;
+  onboardingSpotlight.style.top = `${Math.max(12, rect.top - pad)}px`;
+  onboardingSpotlight.style.width = `${Math.min(window.innerWidth - 24, rect.width + pad * 2)}px`;
+  onboardingSpotlight.style.height = `${Math.min(window.innerHeight - 24, rect.height + pad * 2)}px`;
+
+  const card = onboarding.querySelector(".onboarding-card");
+  const cardRect = card.getBoundingClientRect();
+  const sideSpace = window.innerWidth - rect.right;
+  let left = sideSpace > cardRect.width + 32 ? rect.right + 18 : rect.left;
+  let top = rect.bottom + 18;
+  if (top + cardRect.height > window.innerHeight - 18) top = rect.top - cardRect.height - 18;
+  if (top < 18) top = 18;
+  if (left + cardRect.width > window.innerWidth - 18) left = window.innerWidth - cardRect.width - 18;
+  if (left < 18) left = 18;
+  card.style.left = `${left}px`;
+  card.style.top = `${top}px`;
 }
 
 function renderCommandBoard() {
@@ -1725,12 +1800,23 @@ function combinedStudyDaysLeft(fromIso) {
 }
 
 function weeklyStudyHours() {
-  const start = addDays(today, -((today.getDay() + 6) % 7));
+  const start = startOfWeek(today);
   const end = addDays(start, 6);
   return tasks
     .filter((task) => task.done && task.type === "revision")
     .filter((task) => task.date >= toISO(start) && task.date <= toISO(end))
     .reduce((sum, task) => sum + Number(task.estimatedHours || 0), 0);
+}
+
+function startOfWeek(date) {
+  const offset = personalSettings.weekStartsOn === "sunday" ? date.getDay() : (date.getDay() + 6) % 7;
+  return addDays(date, -offset);
+}
+
+function weekLabels() {
+  return personalSettings.weekStartsOn === "sunday"
+    ? ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
+    : ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 }
 
 function formatDuration(value) {
@@ -2000,29 +2086,44 @@ function renderMenuOutput(view) {
     inbox: `<h3>邮件导入</h3><p>下一步可以做成：粘贴 Outlook/网易邮件内容，自动识别时间和事项，一键加入日历。</p>`,
     settings: `
       <h3>设置</h3>
-      <p>这些设置会影响安全线、默认视图和新手教程。</p>
+      <p>这里放 App 行为、数据和新手教程。个人喜好放在“我”里，避免所有东西挤在一起。</p>
       <div class="settings-grid">
-        <label>昵称<input id="settings-name" type="text" value="${escapeAttribute(personalSettings.name)}" placeholder="例如 Krissy"></label>
-        <label>每日时间上限<input id="settings-limit" type="number" min="1" max="16" step="0.5" value="${escapeAttribute(personalSettings.dailyLimit)}"></label>
-        <label>语气<select id="settings-tone">
-          <option value="gentle" ${personalSettings.tone === "gentle" ? "selected" : ""}>温柔推进</option>
-          <option value="sharp" ${personalSettings.tone === "sharp" ? "selected" : ""}>清醒一点</option>
-          <option value="quiet" ${personalSettings.tone === "quiet" ? "selected" : ""}>安静模式</option>
+        <label>默认打开视图<select id="settings-default-view">
+          <option value="month" ${personalSettings.defaultView === "month" ? "selected" : ""}>月计划</option>
+          <option value="week" ${personalSettings.defaultView === "week" ? "selected" : ""}>周计划</option>
         </select></label>
-        <label>主题<select id="settings-theme">
-          <option value="fresh" ${personalSettings.theme === "fresh" ? "selected" : ""}>小清新</option>
-          <option value="paper" ${personalSettings.theme === "paper" ? "selected" : ""}>纸感</option>
-          <option value="studio" ${personalSettings.theme === "studio" ? "selected" : ""}>工作室</option>
+        <label>一周开始于<select id="settings-week-start">
+          <option value="monday" ${personalSettings.weekStartsOn === "monday" ? "selected" : ""}>周一</option>
+          <option value="sunday" ${personalSettings.weekStartsOn === "sunday" ? "selected" : ""}>周日</option>
         </select></label>
       </div>
       <div class="backup-actions">
         <button id="save-settings" type="button">保存设置</button>
         <button id="replay-onboarding" type="button">重播新手教程</button>
+        <button id="open-data-safe" type="button">数据保险箱</button>
       </div>
     `,
     me: `
       <h3>我</h3>
       <p>${personalSettings.name ? `${escapeHTML(personalSettings.name)} 的` : "你的"}时间不是拿来被 deadline 追着跑的，是拿来被你分配的。</p>
+      <div class="settings-grid">
+        <label>昵称<input id="settings-name" type="text" value="${escapeAttribute(personalSettings.name)}" placeholder="例如 Krissy"></label>
+        <label>每日时间上限<input id="settings-limit" type="number" min="1" max="16" step="0.5" value="${escapeAttribute(personalSettings.dailyLimit)}"></label>
+        <label>提醒语气<select id="settings-tone">
+          <option value="gentle" ${personalSettings.tone === "gentle" ? "selected" : ""}>温柔推进</option>
+          <option value="sharp" ${personalSettings.tone === "sharp" ? "selected" : ""}>清醒一点</option>
+          <option value="quiet" ${personalSettings.tone === "quiet" ? "selected" : ""}>安静模式</option>
+        </select></label>
+        <label>界面质感<select id="settings-theme">
+          <option value="fresh" ${personalSettings.theme === "fresh" ? "selected" : ""}>清新</option>
+          <option value="paper" ${personalSettings.theme === "paper" ? "selected" : ""}>纸感</option>
+          <option value="studio" ${personalSettings.theme === "studio" ? "selected" : ""}>工作室</option>
+        </select></label>
+        <label>主色调<input id="settings-accent" type="color" value="${escapeAttribute(personalSettings.accentColor || "#6d9b89")}"></label>
+      </div>
+      <div class="backup-actions">
+        <button id="save-profile" type="button">保存我的偏好</button>
+      </div>
       <div class="print-actions">
         <button id="print-month" type="button">打印月计划 PDF</button>
         <button id="print-week-from-menu" type="button">打印周计划 PDF</button>
@@ -2083,8 +2184,10 @@ for update using (true) with check (true);</pre>
   if (view === "settings") {
     document.querySelector("#save-settings").addEventListener("click", saveSettingsFromMenu);
     document.querySelector("#replay-onboarding").addEventListener("click", () => openOnboarding(true));
+    document.querySelector("#open-data-safe").addEventListener("click", () => openAppMenu("data"));
   }
   if (view === "me") {
+    document.querySelector("#save-profile").addEventListener("click", saveProfileFromMenu);
     document.querySelector("#print-month").addEventListener("click", () => printCalendar("month"));
     document.querySelector("#print-week-from-menu").addEventListener("click", () => printCalendar("week"));
   }
@@ -2093,15 +2196,30 @@ for update using (true) with check (true);</pre>
 function saveSettingsFromMenu() {
   personalSettings = {
     ...personalSettings,
-    name: document.querySelector("#settings-name").value.trim(),
-    dailyLimit: Number(document.querySelector("#settings-limit").value || 8),
-    tone: document.querySelector("#settings-tone").value,
-    theme: document.querySelector("#settings-theme").value
+    defaultView: document.querySelector("#settings-default-view").value,
+    weekStartsOn: document.querySelector("#settings-week-start").value
   };
   savePersonalSettings();
+  calendarMode = personalSettings.defaultView;
+  printMode = calendarMode;
   render();
   openAppMenu("settings");
   showCelebration("设置已保存");
+}
+
+function saveProfileFromMenu() {
+  personalSettings = {
+    ...personalSettings,
+    name: document.querySelector("#settings-name").value.trim(),
+    dailyLimit: Number(document.querySelector("#settings-limit").value || 8),
+    tone: document.querySelector("#settings-tone").value,
+    theme: document.querySelector("#settings-theme").value,
+    accentColor: document.querySelector("#settings-accent").value
+  };
+  savePersonalSettings();
+  render();
+  openAppMenu("me");
+  showCelebration("偏好已保存");
 }
 
 function printCalendar(mode) {

@@ -18,7 +18,7 @@
         </div>
         <button class="collapse-tab collapse-left" id="collapse-left" type="button" aria-label="折叠左栏">‹</button>
 
-        <nav class="app-nav" aria-label="主要功能">
+        <nav class="app-nav" aria-label="主要功能" data-tour="main-nav">
           <button type="button" data-view="calendar" class="active">日历</button>
           <button type="button" data-view="tasks">清单</button>
           <button type="button" data-view="week">周计划</button>
@@ -26,7 +26,7 @@
           <button type="button" data-view="monthly">总结</button>
         </nav>
 
-        <section class="composer" aria-labelledby="add-title">
+        <section class="composer" aria-labelledby="add-title" data-tour="quick-add">
           <h2 id="add-title">快速收集</h2>
           <form id="task-form">
             <label>
@@ -50,7 +50,7 @@
               </label>
             </div>
             <label>
-              <span>归属项目</span>
+              <span>属于哪个计划</span>
               <select id="project-input" name="projectId"></select>
             </label>
             <label>
@@ -103,14 +103,38 @@
             <p class="eyebrow">日有回响</p>
             <h2 id="month-label">Month</h2>
           </div>
-          <div class="toolbar" aria-label="日历工具">
-            <button id="app-menu-button" type="button" aria-label="打开功能列表">☰</button>
-            <button id="week-mode" type="button" aria-label="周计划">周</button>
-            <button id="month-mode" type="button" aria-label="月计划">月</button>
-            <button id="expand-left" type="button" aria-label="展开左栏">☰</button>
-            <button id="prev-month" type="button" aria-label="上个月">‹</button>
-            <button id="next-month" type="button" aria-label="下个月">›</button>
-            <button id="expand-right" type="button" aria-label="展开右栏">☷</button>
+          <div class="toolbar" aria-label="日历工具" data-tour="toolbar">
+            <div class="tool-group" aria-label="工作区">
+              <button id="app-menu-button" class="icon-button" type="button" aria-label="打开功能中心" title="功能中心">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16M4 12h16M4 18.5h16"/></svg>
+              </button>
+              <button id="expand-left" class="icon-button" type="button" aria-label="展开左栏" title="展开左栏">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16M4 12h16M4 18.5h16"/></svg>
+              </button>
+            </div>
+            <div class="tool-group view-switch" aria-label="视图切换">
+              <button id="month-mode" type="button" aria-label="月计划">月</button>
+              <button id="week-mode" type="button" aria-label="周计划">周</button>
+            </div>
+            <div class="tool-group" aria-label="月份导航">
+              <button id="prev-month" class="icon-button" type="button" aria-label="上个月" title="上个月">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+              </button>
+              <button id="next-month" class="icon-button" type="button" aria-label="下个月" title="下个月">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+              </button>
+            </div>
+            <div class="tool-group" aria-label="账户和设置">
+              <button id="settings-button" class="icon-button" type="button" aria-label="设置" title="设置">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.7 6.3 3 3M3 21l4.5-1 10.9-10.9a2.1 2.1 0 0 0-3-3L4.5 17 3 21Z"/><path d="M12 8 16 4"/></svg>
+              </button>
+              <button id="me-button" class="icon-button" type="button" aria-label="我" title="我">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
+              </button>
+              <button id="expand-right" class="icon-button" type="button" aria-label="展开右栏" title="展开右栏">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h14"/></svg>
+              </button>
+            </div>
           </div>
         </header>
 
@@ -134,7 +158,7 @@
           </article>
         </section>
 
-        <div id="calendar-grid" class="month-stack"></div>
+        <div id="calendar-grid" class="month-stack" data-tour="calendar"></div>
       </section>
 
       <aside class="detail-panel" aria-label="详情">
@@ -172,7 +196,7 @@
               <button id="reset-study" type="button">重置打卡</button>
             </div>
           </div>
-          <div id="study-pool" class="study-pool"></div>
+          <div id="study-pool" class="study-pool" data-tour="task-pool"></div>
         </section>
       </aside>
     </main>
@@ -184,21 +208,25 @@
         <header class="day-sheet-head">
           <div>
             <p class="eyebrow">日有回响</p>
-            <h2 id="menu-title">功能列表</h2>
+            <h2 id="menu-title">功能中心</h2>
           </div>
           <button id="close-app-menu" type="button" aria-label="关闭">×</button>
         </header>
         <div class="menu-grid">
-          <button type="button" data-view="calendar">日历</button>
-          <button type="button" data-view="tasks">任务列表</button>
-          <button type="button" data-view="week">周计划</button>
-          <button type="button" data-view="study">计划项目</button>
-          <button type="button" data-view="monthly">月度总结</button>
-          <button type="button" data-view="yearly">年度总结</button>
-          <button type="button" data-view="inbox">邮件导入</button>
-          <button type="button" data-view="settings">设置</button>
-          <button type="button" data-view="me">我</button>
-          <button type="button" data-view="data">数据保险箱</button>
+          <div class="menu-group">
+            <p class="eyebrow">计划</p>
+            <button type="button" data-view="calendar">月历</button>
+            <button type="button" data-view="week">周计划</button>
+            <button type="button" data-view="tasks">任务列表</button>
+            <button type="button" data-view="study">计划项目</button>
+          </div>
+          <div class="menu-group">
+            <p class="eyebrow">回顾</p>
+            <button type="button" data-view="monthly">月度总结</button>
+            <button type="button" data-view="yearly">年度总结</button>
+            <button type="button" data-view="inbox">邮件导入</button>
+            <button type="button" data-view="data">数据保险箱</button>
+          </div>
         </div>
         <div id="menu-output" class="menu-output"></div>
         <input id="backup-file" type="file" accept="application/json,.json" hidden>
@@ -246,6 +274,7 @@
     </div>
 
     <div id="onboarding" class="onboarding" aria-hidden="true">
+      <div id="onboarding-spotlight" class="onboarding-spotlight" aria-hidden="true"></div>
       <section class="onboarding-card">
         <p id="onboarding-progress" class="eyebrow">1/5</p>
         <h2 id="onboarding-title">欢迎来到日有回响</h2>
@@ -268,6 +297,6 @@
       </article>
     </template>
 
-    <script src="./app.js?v=general-planner-20260907"></script>
+    <script src="./app.js?v=product-polish-20260907"></script>
   </body>
 </html>
