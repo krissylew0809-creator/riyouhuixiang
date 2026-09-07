@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>日有回响 - 把 deadline 变成每天可完成的时间</title>
-    <link rel="stylesheet" href="./styles.css">
+    <link rel="stylesheet" href="./styles.css?v=interface-polish-20260907">
   </head>
   <body>
     <main class="app-shell">
@@ -13,7 +13,7 @@
           <div class="brand-mark" aria-hidden="true">日</div>
           <div>
             <p class="eyebrow">日有回响</p>
-            <h1>把 deadline 变成每天可完成的时间</h1>
+            <h1>把 deadline 拆成今天</h1>
           </div>
         </div>
         <button class="collapse-tab collapse-left" id="collapse-left" type="button" aria-label="折叠左栏">‹</button>
@@ -33,50 +33,55 @@
               <span>标题</span>
               <input id="title-input" name="title" type="text" placeholder="例如 SQL 窗口函数 / 周五交稿" required>
             </label>
-            <div class="form-grid">
-              <label>
-                <span>日期</span>
-                <input id="date-input" name="date" type="date" required>
-              </label>
-              <label>
-                <span>类型</span>
-              <select id="type-input" name="type">
-                <option value="study">学习</option>
-                  <option value="revision">计划项目</option>
-                  <option value="exam">考试/硬DDL</option>
-                  <option value="assignment">作业</option>
-                  <option value="matter">事项</option>
-                </select>
-              </label>
-            </div>
             <label>
-              <span>属于哪个计划</span>
-              <select id="project-input" name="projectId"></select>
+              <span>安排到</span>
+              <input id="date-input" name="date" type="date" required>
             </label>
-            <label>
-              <span>截止日期</span>
-              <input id="due-input" name="due" type="date">
-            </label>
-            <label>
-              <span>备注</span>
-              <textarea id="note-input" name="note" rows="3" placeholder="给未来的自己留一句话"></textarea>
-            </label>
+            <details class="composer-more">
+              <summary>更多选项</summary>
+              <div class="composer-more-fields">
+                <label>
+                  <span>类型</span>
+                  <select id="type-input" name="type">
+                    <option value="study">学习</option>
+                    <option value="revision">计划任务</option>
+                    <option value="exam">考试 / 硬性截止</option>
+                    <option value="assignment">作业</option>
+                    <option value="matter">事项</option>
+                  </select>
+                </label>
+                <label>
+                  <span>所属计划</span>
+                  <select id="project-input" name="projectId"></select>
+                </label>
+                <label>
+                  <span>截止日期</span>
+                  <input id="due-input" name="due" type="date">
+                </label>
+                <label>
+                  <span>备注</span>
+                  <textarea id="note-input" name="note" rows="3" placeholder="给未来的自己留一句话"></textarea>
+                </label>
+              </div>
+            </details>
             <button class="primary-action" type="submit">
               <span aria-hidden="true">+</span>
-              加入日历
+              添加日程
             </button>
           </form>
         </section>
 
         <section class="metrics" aria-label="今日概览">
-          <div>
+          <div class="metric-row">
             <span id="daily-target">6h</span>
-            <p>今日动态安全线</p>
-            <small id="daily-target-note">所有计划项目的实时安全线</small>
+            <div>
+              <p>今日安全线</p>
+              <small id="daily-target-note">所有计划项目的实时安全线</small>
+            </div>
           </div>
-          <div>
+          <div class="metric-row">
             <span id="weekly-hours">0h</span>
-            <p>本周学习记录</p>
+            <div><p>本周已完成</p></div>
           </div>
         </section>
 
@@ -100,7 +105,7 @@
       <section class="calendar-panel" aria-label="日历">
         <header class="topbar">
           <div>
-            <p class="eyebrow">日有回响</p>
+            <p class="topbar-context">日有回响</p>
             <h2 id="month-label">Month</h2>
           </div>
           <div class="toolbar" aria-label="日历工具" data-tour="toolbar">
@@ -125,6 +130,9 @@
               </button>
             </div>
             <div class="tool-group" aria-label="账户和设置">
+              <button id="quick-add-button" class="icon-button" type="button" aria-label="新建日程" title="新建日程">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+              </button>
               <button id="settings-button" class="icon-button" type="button" aria-label="设置" title="设置">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.7 6.3 3 3M3 21l4.5-1 10.9-10.9a2.1 2.1 0 0 0-3-3L4.5 17 3 21Z"/><path d="M12 8 16 4"/></svg>
               </button>
@@ -164,7 +172,7 @@
       <aside class="detail-panel" aria-label="详情">
         <button class="collapse-tab collapse-right" id="collapse-right" type="button" aria-label="折叠右栏">›</button>
         <section class="selected-day">
-          <p class="eyebrow">Selected day</p>
+          <p class="selected-context">所选日期</p>
           <h2 id="selected-date">今天</h2>
           <p id="selected-roast" class="roast">生活看起来非常有结构。</p>
           <div class="daily-note-box">
@@ -237,7 +245,7 @@
       <section class="menu-sheet course-editor-sheet" role="dialog" aria-modal="true" aria-labelledby="course-editor-title">
         <header class="day-sheet-head">
           <div>
-            <p class="eyebrow">Project editor</p>
+            <p class="selected-context">编辑计划</p>
             <h2 id="course-editor-title">编辑计划项目</h2>
           </div>
           <button id="close-course-editor" type="button" aria-label="关闭">×</button>
@@ -250,7 +258,7 @@
       <section class="day-sheet" role="dialog" aria-modal="true" aria-labelledby="day-modal-title">
         <header class="day-sheet-head">
           <div>
-            <p class="eyebrow">Day studio</p>
+            <p class="selected-context">当天安排</p>
             <h2 id="day-modal-title">今天</h2>
             <p id="day-safe-line">动态安全线</p>
           </div>
@@ -297,6 +305,6 @@
       </article>
     </template>
 
-    <script src="./app.js?v=product-polish-20260907"></script>
+    <script src="./app.js?v=interface-polish-20260907"></script>
   </body>
 </html>

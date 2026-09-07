@@ -161,6 +161,13 @@ document.querySelector("#me-button").addEventListener("click", () => {
   openAppMenu("me");
 });
 
+document.querySelector("#quick-add-button").addEventListener("click", () => {
+  const composer = document.querySelector(".composer");
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  composer.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
+  window.setTimeout(() => document.querySelector("#title-input").focus(), reducedMotion ? 0 : 280);
+});
+
 document.querySelector("#week-mode").addEventListener("click", () => {
   calendarMode = "week";
   printMode = "week";
@@ -480,7 +487,7 @@ function loadPersonalSettings() {
     defaultView: "month",
     tone: "gentle",
     theme: "fresh",
-    accentColor: "#6d9b89"
+    accentColor: "#476f61"
   };
   try {
     return { ...defaults, ...JSON.parse(localStorage.getItem(PERSONAL_SETTINGS_KEY) || "{}") };
@@ -495,11 +502,33 @@ function savePersonalSettings() {
 }
 
 function applyPersonalTheme() {
-  const accent = personalSettings.accentColor || "#6d9b89";
+  const accent = personalSettings.accentColor || "#476f61";
   document.body.dataset.theme = personalSettings.theme || "fresh";
   document.documentElement.style.setProperty("--accent", accent);
+  document.documentElement.style.setProperty("--accent-ink", contrastColor(accent));
+  document.documentElement.style.setProperty("--accent-text", shadeColor(accent, 0.24));
   document.documentElement.style.setProperty("--accent-soft", tintColor(accent, 0.86));
   document.documentElement.style.setProperty("--accent-faint", tintColor(accent, 0.94));
+}
+
+function contrastColor(hex) {
+  const clean = String(hex || "").replace("#", "");
+  if (!/^[0-9a-f]{6}$/i.test(clean)) return "#ffffff";
+  const value = Number.parseInt(clean, 16);
+  const red = (value >> 16) & 255;
+  const green = (value >> 8) & 255;
+  const blue = value & 255;
+  const luminance = (red * 0.299 + green * 0.587 + blue * 0.114) / 255;
+  return luminance > 0.48 ? "#1f2b28" : "#ffffff";
+}
+
+function shadeColor(hex, amount) {
+  const clean = String(hex || "").replace("#", "");
+  if (!/^[0-9a-f]{6}$/i.test(clean)) return "#365c50";
+  const value = Number.parseInt(clean, 16);
+  const rgb = [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+  const shaded = rgb.map((channel) => Math.round(channel * (1 - amount)));
+  return `#${shaded.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
 }
 
 function tintColor(hex, amount) {
@@ -1029,7 +1058,7 @@ function renderWeekSection(anchorIso) {
   section.innerHTML = `
     <div class="week-title">
       <div>
-        <p class="eyebrow">Week plan</p>
+        <p class="selected-context">本周</p>
         <h3>${formatDate(toISO(start))} - ${formatDate(toISO(addDays(start, 6)))}</h3>
       </div>
       <button type="button" class="print-week">打印本周</button>
@@ -1208,6 +1237,8 @@ function positionOnboarding(step) {
   document.querySelectorAll(".tour-target").forEach((item) => item.classList.remove("tour-target"));
   const target = document.querySelector(step.target);
   if (!target) return;
+  const disclosure = target.closest("details");
+  if (disclosure) disclosure.open = true;
   target.classList.add("tour-target");
   target.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
   window.setTimeout(() => placeOnboardingCard(target), 260);
@@ -2119,7 +2150,7 @@ function renderMenuOutput(view) {
           <option value="paper" ${personalSettings.theme === "paper" ? "selected" : ""}>纸感</option>
           <option value="studio" ${personalSettings.theme === "studio" ? "selected" : ""}>工作室</option>
         </select></label>
-        <label>主色调<input id="settings-accent" type="color" value="${escapeAttribute(personalSettings.accentColor || "#6d9b89")}"></label>
+        <label>主色调<input id="settings-accent" type="color" value="${escapeAttribute(personalSettings.accentColor || "#476f61")}"></label>
       </div>
       <div class="backup-actions">
         <button id="save-profile" type="button">保存我的偏好</button>
